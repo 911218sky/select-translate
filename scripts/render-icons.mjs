@@ -5,13 +5,32 @@ import { deflateSync } from "node:zlib";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sizes = [16, 32, 48, 128];
-const BLUE = [26, 115, 232];
-const LIGHT = [76, 141, 246];
-const WHITE = [255, 255, 255];
 
-const PATHS = [
-  "M24 36h46v8H56.8c2.4 7.2 6.8 13.4 12.8 18.2l-5.6 5.6C56.4 61.2 51.2 53.2 48.6 44H24V36zm70 12h20v7H104l-12 31H81l11.6-28.4L84.4 48H94z",
-  "M30 76h28v7H41.2L36 96h-8.6L33 83H30V76zm16 0 16 34h-9.2L46.2 93 39.6 110H30l16-34z"
+// Matches icons/icon.svg: light gray + solid rounded T + teal accent
+const BG = [243, 244, 246];
+const INK = [17, 24, 39];
+const TEAL = [20, 184, 166];
+const K = 0.5522847498; // cubic approx for quarter-circle
+
+function roundedRectPath(x, y, w, h, r) {
+  const k = r * K;
+  return (
+    `M${x + r} ${y}` +
+    `H${x + w - r}` +
+    `C${x + w - r + k} ${y} ${x + w} ${y + r - k} ${x + w} ${y + r}` +
+    `V${y + h - r}` +
+    `C${x + w} ${y + h - r + k} ${x + w - r + k} ${y + h} ${x + w - r} ${y + h}` +
+    `H${x + r}` +
+    `C${x + r - k} ${y + h} ${x} ${y + h - r + k} ${x} ${y + h - r}` +
+    `V${y + r}` +
+    `C${x} ${y + r - k} ${x + r - k} ${y} ${x + r} ${y}Z`
+  );
+}
+
+const LAYERS = [
+  { color: INK, d: roundedRectPath(28, 36, 72, 20, 8) },
+  { color: INK, d: roundedRectPath(54, 48, 20, 50, 8) },
+  { color: TEAL, circle: { cx: 88, cy: 78, r: 8 } }
 ];
 
 function pngChunk(tag, data) {
@@ -133,6 +152,13 @@ function evenOdd(px, py, polygons) {
   return inside;
 }
 
+function circleCover(px, py, { cx, cy, r }) {
+  const d = Math.hypot(px - cx, py - cy);
+  if (d <= r - 0.55) return 1;
+  if (d >= r + 0.55) return 0;
+  return 0.5 - (d - r);
+}
+
 function roundedRect(px, py, size) {
   const r = size * 0.21875;
   const x = Math.max(0, Math.min(size - 1, px));
@@ -186,7 +212,12 @@ async function writePng(file, pixels) {
   );
 }
 
-const polygons = PATHS.flatMap(pathToPolygons);
+const layers = LAYERS.map((layer) =>
+  layer.circle
+    ? { color: layer.color, circle: layer.circle }
+    : { color: layer.color, polygons: pathToPolygons(layer.d) }
+);
+
 const svg = await readFile(path.join(root, "icons", "icon.svg"), "utf8");
 if (!svg.includes("<svg")) throw new Error("icons/icon.svg must be SVG, not JS");
 
@@ -197,25 +228,27 @@ for (const size of sizes) {
   for (let y = 0; y < size; y++) {
     const row = [];
     for (let x = 0; x < size; x++) {
-      const t = (x + y) / (2 * (size - 1 || 1));
-      const bg = [
-        Math.round(LIGHT[0] + (BLUE[0] - LIGHT[0]) * t),
-        Math.round(LIGHT[1] + (BLUE[1] - LIGHT[1]) * t),
-        Math.round(LIGHT[2] + (BLUE[2] - LIGHT[2]) * t)
-      ];
       const shape = roundedRect(x, y, size);
-      let pixel = [bg[0], bg[1], bg[2], Math.round(shape * 255)];
+      let pixel = [BG[0], BG[1], BG[2], Math.round(shape * 255)];
       const samples = [
         [0.25, 0.25],
         [0.75, 0.25],
         [0.25, 0.75],
         [0.75, 0.75]
       ];
-      let cover = 0;
-      for (const [sx, sy] of samples) {
-        if (evenOdd((x + sx) / scale, (y + sy) / scale, polygons)) cover += 0.25;
+      for (const layer of layers) {
+        let cover = 0;
+        if (layer.circle) {
+          for (const [sx, sy] of samples) {
+            cover += 0.25 * circleCover((x + sx) / scale, (y + sy) / scale, layer.circle);
+          }
+        } else {
+          for (const [sx, sy] of samples) {
+            if (evenOdd((x + sx) / scale, (y + sy) / scale, layer.polygons)) cover += 0.25;
+          }
+        }
+        if (cover) pixel = mix(layer.color, pixel, cover * shape);
       }
-      if (cover && shape) pixel = mix(WHITE, pixel, cover * shape);
       row.push(pixel);
     }
     pixels.push(row);

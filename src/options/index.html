@@ -4,11 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Select Translate settings</title>
-    <link rel="stylesheet" href="ui.css" />
+    <link rel="stylesheet" href="../styles/ui.css" />
   </head>
   <body class="options">
     <header class="topbar">
-      <img src="../icons/icon32.png" alt="" />
+      <img src="../../icons/icon32.png" alt="" />
       <div>
         <p class="eyebrow" data-i18n="extName">Select Translate</p>
         <h1 data-i18n="optionsHeading">Settings</h1>
@@ -43,7 +43,7 @@
         <div class="setting" id="accentSetting">
           <div>
             <div class="setting-title" data-i18n="accent">強調色</div>
-            <div class="setting-desc" data-i18n="accentDesc">按鈕、選取狀態和氣泡重點會使用這個顏色。</div>
+            <div class="setting-desc" data-i18n="accentDesc">翻譯氣泡與譯文重點會使用這個顏色。</div>
           </div>
           <div class="swatches" id="swatches"></div>
         </div>
@@ -86,16 +86,17 @@
           <label class="setting stack">
             <span>
               <span class="setting-title" data-i18n="llmEndpoint">API endpoint</span>
-              <span class="setting-desc" data-i18n="llmEndpointDesc">Full request URL. Leave blank to use the official default for this format.</span>
+              <span class="setting-desc" data-i18n="llmEndpointDesc">Full chat URL or just the base (for example …/v1). Leave blank for the official default.</span>
             </span>
             <input id="llmEndpoint" name="llmEndpoint" type="url" spellcheck="false" />
           </label>
           <label class="setting stack">
             <span>
               <span class="setting-title" data-i18n="llmModel">Model</span>
-              <span class="setting-desc" data-i18n="llmModelDesc">Model name on the node.</span>
+              <span class="setting-desc" data-i18n="llmModelDesc">Fetch the list from the node, or type a model name manually.</span>
             </span>
-            <input id="llmModel" name="llmModel" type="text" spellcheck="false" />
+            <select id="llmModelSelect" hidden></select>
+            <input id="llmModel" name="llmModel" type="text" spellcheck="false" autocomplete="off" />
           </label>
           <label class="setting stack">
             <span>
@@ -104,6 +105,11 @@
             </span>
             <input id="llmApiKey" name="llmApiKey" type="password" autocomplete="off" spellcheck="false" />
           </label>
+          <div class="llm-actions">
+            <button type="button" id="llmFetchModels" class="secondary" data-i18n="llmFetchModels">Fetch models</button>
+            <button type="button" id="llmTest" class="secondary" data-i18n="llmTest">Test connection</button>
+          </div>
+          <p id="llmStatus" class="llm-status" hidden></p>
         </div>
         <label class="setting stack">
           <span>
@@ -122,11 +128,11 @@
         <label class="setting stack">
           <span>
             <span class="setting-title" data-i18n="trigger">觸發方式</span>
-            <span class="setting-desc" data-i18n="triggerDesc">選取後直接翻譯，或先顯示翻譯按鈕。</span>
+            <span class="setting-desc" data-i18n="triggerDesc">選取後直接翻譯，或改成只用右鍵／快捷鍵。</span>
           </span>
           <select id="trigger" name="trigger">
             <option value="auto">選取後直接顯示譯文</option>
-            <option value="button">選取後顯示翻譯按鈕</option>
+            <option value="button">僅右鍵或 Alt+T 時翻譯</option>
           </select>
         </label>
         <label class="setting">
@@ -162,6 +168,6 @@
       </section>
     </main>
     <div id="toast" class="toast" hidden data-i18n="saved">已儲存</div>
-    <script src="options.js"></script>
+    <script src="index.js"></script>
   </body>
 </html>

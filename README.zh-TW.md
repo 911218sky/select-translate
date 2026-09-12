@@ -10,7 +10,7 @@
 
 ## 功能
 
-- 選取後自動翻譯，或先顯示翻譯按鈕
+- 選取後自動翻譯，或改成只用右鍵／`Alt+T`
 - 氣泡可改來源語言與目標語言
 - 來源語言和目標語言相同，或譯文與原文相同時不彈窗
 - 喇叭使用 Google 翻譯的語音（`translate.google.com/translate_tts`）
@@ -71,9 +71,29 @@ npm test
 npm run typecheck
 npm run build
 npm run pack
+npm run icons
 ```
 
-原始碼是 `src/` 底下的 TypeScript，由 `esbuild` 打包成 Chrome 可載入的 IIFE。
+### 目錄結構
+
+```text
+src/                 擴充功能原始碼
+  background/        service worker
+  content/           網頁氣泡
+  popup/             工具列彈窗
+  options/           設定頁
+  offscreen/         語音播放
+  lib/               共用型別、i18n、主題、LLM、工具函式
+  styles/            共用 CSS
+icons/               正式圖示
+_locales/            Chrome 語系字串
+scripts/             建置與圖示工具
+tests/               單元測試
+examples/            本機示範頁
+design/              設計草稿（不會打包）
+```
+
+原始碼由 `esbuild` 打包成 Chrome 可載入的 IIFE。`_locales/` 與 `icons/` 留在專案根目錄，因為 Chrome 要求它們與 `manifest.json` 同層。
 
 ## 授權
 
