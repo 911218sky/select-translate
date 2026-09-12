@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   contrastText,
+  DEFAULTS,
   googleTtsUrl,
   languageName,
   mixHex,
@@ -15,6 +16,7 @@ import {
   sanitizeHttpUrl,
   shouldHideTranslation,
   stripTags,
+  truncateCodePoints,
   ttsLang,
   unique
 } from "../src/lib/shared.ts";
@@ -40,6 +42,8 @@ test("language helpers", () => {
   assert.equal(shouldHideTranslation("zh-TW", "zh-TW"), true);
   assert.equal(shouldHideTranslation("en", "zh-TW", "hello", "hello"), true);
   assert.equal(shouldHideTranslation("en", "zh-TW", "hello", "你好"), false);
+  assert.equal(truncateCodePoints("hello😀world", 6), "hello😀");
+  assert.equal(truncateCodePoints("hi", 10), "hi");
   assert.equal(sanitizeHttpUrl("https://api.example.com/v1/chat"), "https://api.example.com/v1/chat");
   assert.equal(sanitizeHttpUrl("javascript:alert(1)"), "");
 });
@@ -69,7 +73,7 @@ test("google parser", () => {
   assert.equal(parsed.dictionary[1].pos, "adjective");
   assert.equal(JSON.stringify(parsed.alternatives), JSON.stringify(["工程", "工程學"]));
   const empty = parseGoogleResult(null, "hello", "auto", "zh-TW");
-  assert.equal(empty.translated, "hello");
+  assert.equal(empty.translated, "");
 });
 
 test("theme and tts helpers", () => {
@@ -109,6 +113,7 @@ test("i18n", () => {
 
 test("llm config", () => {
   const openai = resolveLlmConfig({
+    ...DEFAULTS,
     translator: "llm",
     llmProvider: "openai",
     llmEndpoint: "",
@@ -117,6 +122,7 @@ test("llm config", () => {
   assert.equal(openai.endpoint, "https://api.openai.com/v1/chat/completions");
   assert.equal(openai.model, "gpt-4o-mini");
   const custom = resolveLlmConfig({
+    ...DEFAULTS,
     translator: "llm",
     llmProvider: "openai",
     llmEndpoint: "https://llm.example.com/v1/chat/completions",
@@ -124,6 +130,14 @@ test("llm config", () => {
   });
   assert.equal(custom.endpoint, "https://llm.example.com/v1/chat/completions");
   assert.equal(custom.model, "local-model");
+  const invalid = resolveLlmConfig({
+    ...DEFAULTS,
+    translator: "llm",
+    llmProvider: "openai",
+    llmEndpoint: "127.0.0.1:11434/v1",
+    llmModel: "llama"
+  });
+  assert.equal(invalid.endpoint, "");
   assert.equal(
     modelsListUrl("openai", "https://llm.example.com/v1/chat/completions"),
     "https://llm.example.com/v1/models"
@@ -132,6 +146,13 @@ test("llm config", () => {
   assert.equal(
     modelsListUrl("gemini", "https://generativelanguage.googleapis.com/v1beta"),
     "https://generativelanguage.googleapis.com/v1beta/models"
+  );
+  assert.equal(
+    modelsListUrl(
+      "openai",
+      "https://example.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-01-01"
+    ),
+    "https://example.openai.azure.com/openai/models?api-version=2024-01-01"
   );
   assert.equal(
     chatCompletionsUrl("openai", "https://llm.example.com/v1"),

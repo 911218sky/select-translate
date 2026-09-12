@@ -5,9 +5,18 @@ import { t } from "./i18n.ts";
 export function resolveLlmConfig(settings: Settings): { provider: LlmProvider; endpoint: string; model: string } {
   const provider = settings.llmProvider || "openai";
   const defaults = llmDefaults(provider);
-  const endpoint = sanitizeHttpUrl(settings.llmEndpoint) || defaults.endpoint;
+  const rawEndpoint = String(settings.llmEndpoint || "").trim();
+  // Empty = official default. Non-empty but invalid must not silently fall back.
+  const endpoint = rawEndpoint ? sanitizeHttpUrl(rawEndpoint) : defaults.endpoint;
   const model = String(settings.llmModel || "").trim() || defaults.model;
   return { provider, endpoint, model };
+}
+
+/** Rough output budget from input length (Claude/Gemini need max_tokens). */
+export function llmMaxOutputTokens(settings: Settings, inputChars = 0): number {
+  const limit = Math.min(Math.max(Number(settings.maxChars) || 5000, 1), 5000);
+  const chars = Math.min(Math.max(inputChars || limit, 1), limit);
+  return Math.max(256, Math.min(4096, Math.ceil(chars * 1.5) + 64));
 }
 
 export function llmOrigin(endpoint: string): string {
@@ -44,6 +53,8 @@ export function modelsListUrl(provider: LlmProvider, endpoint: string): string {
     return url.toString();
   }
   let path = url.pathname.replace(/\/+$/, "");
+  // Azure OpenAI: …/openai/deployments/{name}/chat/completions → …/openai/models
+  path = path.replace(/\/openai\/deployments\/[^/]+\/chat\/completions$/i, "/openai");
   path = path
     .replace(/\/chat\/completions$/i, "")
     .replace(/\/messages$/i, "")
@@ -79,7 +90,8 @@ export async function translateWithLlm(
   sl: string,
   tl: string,
   settings: Settings,
-  apiKey: string
+  apiKey: string,
+  signal?: AbortSignal
 ): Promise<TranslateResult> {
   const { provider, endpoint, model } = resolveLlmConfig(settings);
   if (!endpoint) throw new Error(t("errorLlmConfig", settings));
@@ -87,10 +99,10 @@ export async function translateWithLlm(
   const prompt = translationPrompt(text, sl, tl);
   const translated =
     provider === "claude"
-      ? await translateClaude(chatUrl, model, apiKey, prompt, settings)
+      ? await translateClaude(chatUrl, model, apiKey, prompt, settings, text.length, signal)
       : provider === "gemini"
-        ? await translateGemini(endpoint, model, apiKey, prompt, settings)
-        : await translateOpenAi(chatUrl, model, apiKey, prompt, settings);
+        ? await translateGemini(endpoint, model, apiKey, prompt, settings, text.length, signal)
+        : await translateOpenAi(chatUrl, model, apiKey, prompt, settings, text.length, signal);
   if (!translated) throw new Error(t("errorLlmEmpty", settings));
   return {
     original: text,
@@ -118,7 +130,9 @@ async function translateOpenAi(
   model: string,
   apiKey: string,
   prompt: { system: string; user: string },
-  settings: Settings
+  settings: Settings,
+  inputChars: number,
+  signal?: AbortSignal
 ): Promise<string> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -127,13 +141,15 @@ async function translateOpenAi(
     {
       model,
       temperature: 0,
+      max_tokens: llmMaxOutputTokens(settings, inputChars),
       messages: [
         { role: "system", content: prompt.system },
         { role: "user", content: prompt.user }
       ]
     },
     headers,
-    settings
+    settings,
+    signal
   );
   const choice = Array.isArray((data as { choices?: unknown[] }).choices)
     ? ((data as { choices: Array<{ message?: { content?: unknown } }> }).choices[0]?.message?.content)
@@ -146,7 +162,9 @@ async function translateClaude(
   model: string,
   apiKey: string,
   prompt: { system: string; user: string },
-  settings: Settings
+  settings: Settings,
+  inputChars: number,
+  signal?: AbortSignal
 ): Promise<string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -157,13 +175,14 @@ async function translateClaude(
     endpoint,
     {
       model,
-      max_tokens: 1024,
+      max_tokens: llmMaxOutputTokens(settings, inputChars),
       temperature: 0,
       system: prompt.system,
       messages: [{ role: "user", content: prompt.user }]
     },
     headers,
-    settings
+    settings,
+    signal
   );
   const content = (data as { content?: Array<{ text?: unknown }> }).content;
   const text = Array.isArray(content) ? content.map((part) => extractText(part?.text)).join("") : "";
@@ -175,7 +194,9 @@ async function translateGemini(
   model: string,
   apiKey: string,
   prompt: { system: string; user: string },
-  settings: Settings
+  settings: Settings,
+  inputChars: number,
+  signal?: AbortSignal
 ): Promise<string> {
   const url = geminiUrl(endpoint, model, apiKey);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -185,10 +206,11 @@ async function translateGemini(
     {
       systemInstruction: { parts: [{ text: prompt.system }] },
       contents: [{ role: "user", parts: [{ text: prompt.user }] }],
-      generationConfig: { temperature: 0 }
+      generationConfig: { temperature: 0, maxOutputTokens: llmMaxOutputTokens(settings, inputChars) }
     },
     headers,
-    settings
+    settings,
+    signal
   );
   const parts = (data as { candidates?: Array<{ content?: { parts?: Array<{ text?: unknown }> } }> }).candidates?.[0]
     ?.content?.parts;
@@ -200,7 +222,10 @@ function geminiUrl(endpoint: string, model: string, apiKey: string): URL {
   const modelId = String(model || "")
     .trim()
     .replace(/^models\//i, "");
-  if (!/:(generateContent|streamGenerateContent)$/.test(url.pathname)) {
+  // Prefer non-streaming generateContent; rewrite stream URLs so readJson gets JSON.
+  if (/:streamGenerateContent$/.test(url.pathname)) {
+    url.pathname = url.pathname.replace(/:streamGenerateContent$/, ":generateContent");
+  } else if (!/:generateContent$/.test(url.pathname)) {
     const base = url.pathname
       .replace(/\/+$/, "")
       .replace(/\/models\/[^/]+(?::[\w]+)?$/, "")
@@ -256,17 +281,20 @@ async function postJson(
   url: string,
   body: unknown,
   headers: Record<string, string>,
-  settings: Settings
+  settings: Settings,
+  signal?: AbortSignal
 ): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(url, {
       method: "POST",
       headers,
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: signal ?? AbortSignal.timeout(25_000)
     });
-  } catch {
-    throw new Error(t("errorLlmPermission", settings));
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error;
+    throw new Error(t("errorLlmNetwork", settings));
   }
   return readJson(response, settings);
 }
@@ -274,9 +302,9 @@ async function postJson(
 async function getJson(url: string, headers: Record<string, string>, settings: Settings): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(url, { method: "GET", headers });
+    response = await fetch(url, { method: "GET", headers, signal: AbortSignal.timeout(25_000) });
   } catch {
-    throw new Error(t("errorLlmPermission", settings));
+    throw new Error(t("errorLlmNetwork", settings));
   }
   return readJson(response, settings);
 }
@@ -284,7 +312,13 @@ async function getJson(url: string, headers: Record<string, string>, settings: S
 async function readJson(response: Response, settings: Settings): Promise<unknown> {
   const raw = await response.text();
   if (!response.ok) {
-    throw new Error(t("errorLlmHttp", settings, { STATUS: String(response.status) }));
+    const detail = summarizeHttpError(raw);
+    const status = String(response.status);
+    throw new Error(
+      detail
+        ? t("errorLlmHttpDetail", settings, { STATUS: status, DETAIL: detail })
+        : t("errorLlmHttp", settings, { STATUS: status })
+    );
   }
   const trimmed = raw.trim();
   if (!trimmed) throw new Error(t("errorLlmEmpty", settings));
@@ -304,4 +338,28 @@ function extractText(value: unknown): string {
   if (Array.isArray(value)) return value.map((part) => extractText(part)).join("").trim();
   if (value && typeof value === "object" && "text" in value) return extractText((value as { text: unknown }).text);
   return "";
+}
+
+function summarizeHttpError(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  try {
+    const data = JSON.parse(trimmed) as {
+      error?: { message?: unknown } | string;
+      message?: unknown;
+    };
+    const nested = data.error;
+    const message =
+      typeof nested === "string"
+        ? nested
+        : nested && typeof nested === "object"
+          ? nested.message
+          : data.message;
+    return String(message || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 160);
+  } catch {
+    return trimmed.replace(/\s+/g, " ").slice(0, 120);
+  }
 }

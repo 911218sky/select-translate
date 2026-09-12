@@ -23,6 +23,7 @@ async function bundle() {
         entryPoints: [`src/${dir}/index.ts`],
         outfile: `src/${dir}/index.js`,
         bundle: true,
+        minify: true,
         format: "iife",
         platform: "browser",
         target: "es2022",
