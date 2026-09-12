@@ -1,7 +1,7 @@
-import type { Settings, TranslateResult } from "./types.ts";
-import { DEFAULTS, escapeHtml, languageName, languageOptionsHtml, toStorage } from "./shared.ts";
-import { applyDomI18n, t } from "./i18n.ts";
-import { watch } from "./theme.ts";
+import type { Settings, TranslateResult } from "../lib/types.ts";
+import { DEFAULTS, escapeHtml, languageName, languageOptionsHtml, toStorage } from "../lib/shared.ts";
+import { applyDomI18n, t } from "../lib/i18n.ts";
+import { watch } from "../lib/theme.ts";
 
 const sourceText = must(document.getElementById("sourceText") as HTMLTextAreaElement | null);
 const sourceLang = must(document.getElementById("sourceLang") as HTMLSelectElement | null);
@@ -10,6 +10,7 @@ const result = must(document.getElementById("result"));
 const errorBox = must(document.getElementById("error"));
 
 let uiLocale = DEFAULTS.uiLocale;
+let translating = false;
 
 void chrome.storage.sync.get(toStorage(DEFAULTS)).then((stored) => {
   const settings = { ...DEFAULTS, ...(stored as unknown as Partial<Settings>) };
@@ -38,6 +39,7 @@ sourceText.addEventListener("keydown", (event) => {
 });
 
 async function translate(): Promise<void> {
+  if (translating) return;
   const text = sourceText.value.trim();
   errorBox.hidden = true;
   result.hidden = true;
@@ -45,6 +47,9 @@ async function translate(): Promise<void> {
     showError(t("popupNeedText", uiLocale));
     return;
   }
+  const button = document.getElementById("translate") as HTMLButtonElement | null;
+  translating = true;
+  if (button) button.disabled = true;
   try {
     const response = await chrome.runtime.sendMessage({
       type: "TRANSLATE",
@@ -73,6 +78,9 @@ async function translate(): Promise<void> {
     });
   } catch (error) {
     showError(error instanceof Error ? error.message : t("popupFailed", uiLocale));
+  } finally {
+    translating = false;
+    if (button) button.disabled = false;
   }
 }
 

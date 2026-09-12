@@ -33,10 +33,18 @@ export type MessageKey =
   | "llmApiKey"
   | "llmApiKeyDesc"
   | "llmApiKeyPlaceholder"
+  | "llmFetchModels"
+  | "llmTest"
+  | "llmBusy"
+  | "llmFetchOk"
+  | "llmFetchEmpty"
+  | "llmTestOk"
+  | "llmModelCustom"
   | "errorLlmConfig"
   | "errorLlmHttp"
   | "errorLlmEmpty"
   | "errorLlmPermission"
+  | "errorLlmNotJson"
   | "translation"
   | "targetLang"
   | "targetLangDesc"
@@ -102,7 +110,7 @@ const ZH: Catalog = {
   themeSystem: "系統",
   themeChrome: "Chrome",
   accent: "強調色",
-  accentDesc: "按鈕、選取狀態和氣泡重點會使用這個顏色。選 Chrome 主題時，會優先用瀏覽器主題色。",
+  accentDesc: "翻譯氣泡與譯文重點會使用這個顏色。選 Chrome 主題時，會優先用瀏覽器主題色。",
   customColor: "自訂顏色",
   uiLanguage: "介面語言",
   uiLanguageDesc: "設定頁、彈窗和氣泡只支援英文與繁體中文。預設為英文。",
@@ -115,25 +123,33 @@ const ZH: Catalog = {
   llmProvider: "API 格式",
   llmProviderDesc: "依節點實際支援的協定選擇。多數轉發服務可用 OpenAI。",
   llmEndpoint: "API 節點",
-  llmEndpointDesc: "完整請求網址。留空則使用該格式的預設官方位址。",
+  llmEndpointDesc: "可填完整聊天網址，或只填 base（例如 …/v1）。留空則用該格式預設。",
   llmModel: "模型",
-  llmModelDesc: "節點上的模型名稱。",
+  llmModelDesc: "可按「取得模型」從節點拉下拉清單，或手動輸入名稱。",
   llmApiKey: "API 金鑰",
   llmApiKeyDesc: "只存在這台電腦，不會同步到 Chrome 帳號。",
   llmApiKeyPlaceholder: "選填，依節點需求",
+  llmFetchModels: "取得模型",
+  llmTest: "測試連線",
+  llmBusy: "處理中…",
+  llmFetchOk: "已載入 $COUNT$ 個模型",
+  llmFetchEmpty: "節點沒有回傳可用模型",
+  llmTestOk: "連線成功。試譯：「$RESULT$」",
+  llmModelCustom: "自訂（下方輸入）",
   errorLlmConfig: "請先在設定裡填寫 LLM 節點與金鑰",
   errorLlmHttp: "LLM 節點回應失敗（$STATUS$）",
   errorLlmEmpty: "LLM 沒有回傳譯文",
   errorLlmPermission: "沒有權限連到這個 LLM 節點",
+  errorLlmNotJson: "節點回傳的不是 JSON，請確認 API 節點網址是否正確",
   translation: "翻譯",
   targetLang: "目標語言",
   targetLangDesc: "選取文字後預設翻成這個語言。",
   sourceLang: "來源語言",
   sourceLangDesc: "通常保持自動偵測即可。",
   trigger: "觸發方式",
-  triggerDesc: "選取後直接翻譯，或先顯示翻譯按鈕。",
+  triggerDesc: "選取後直接翻譯，或改成只用右鍵／快捷鍵。",
   triggerAuto: "選取後直接顯示譯文",
-  triggerButton: "選取後顯示翻譯按鈕",
+  triggerButton: "僅右鍵或 Alt+T 時翻譯",
   skipInputs: "略過輸入框",
   skipInputsDesc: "在搜尋欄、表單或文字框裡反白時不跳出翻譯。",
   enableTts: "啟用朗讀",
@@ -189,7 +205,7 @@ const EN: Catalog = {
   themeSystem: "System",
   themeChrome: "Chrome",
   accent: "Accent color",
-  accentDesc: "Buttons and highlights use this color. Chrome theme mode prefers the browser theme color.",
+  accentDesc: "Used for the translation bubble and translated text. Chrome theme mode prefers the browser theme color.",
   customColor: "Custom color",
   uiLanguage: "Interface language",
   uiLanguageDesc: "Settings, popup, and bubble text. English and Traditional Chinese only. English is the default.",
@@ -202,25 +218,33 @@ const EN: Catalog = {
   llmProvider: "API format",
   llmProviderDesc: "Choose the protocol your node speaks. Most proxies use OpenAI.",
   llmEndpoint: "API endpoint",
-  llmEndpointDesc: "Full request URL. Leave blank to use the official default for this format.",
+  llmEndpointDesc: "Full chat URL or just the base (for example …/v1). Leave blank for the official default.",
   llmModel: "Model",
-  llmModelDesc: "Model name on the node.",
+  llmModelDesc: "Fetch models into a dropdown, or type a name manually.",
   llmApiKey: "API key",
   llmApiKeyDesc: "Stored on this computer only. It is not synced with your Chrome account.",
   llmApiKeyPlaceholder: "Optional, if the node requires one",
+  llmFetchModels: "Fetch models",
+  llmTest: "Test connection",
+  llmBusy: "Working…",
+  llmFetchOk: "Loaded $COUNT$ models",
+  llmFetchEmpty: "The node returned no models",
+  llmTestOk: "Connected. Sample: “$RESULT$”",
+  llmModelCustom: "Custom (type below)",
   errorLlmConfig: "Add an LLM endpoint and key in settings first",
   errorLlmHttp: "The LLM endpoint failed ($STATUS$)",
   errorLlmEmpty: "The LLM returned no translation",
   errorLlmPermission: "This extension cannot reach that LLM endpoint",
+  errorLlmNotJson: "The endpoint returned HTML/text instead of JSON. Check the API URL.",
   translation: "Translation",
   targetLang: "Target language",
   targetLangDesc: "Selected text is translated into this language by default.",
   sourceLang: "Source language",
   sourceLangDesc: "Keep automatic detection unless you need a fixed source.",
   trigger: "Trigger",
-  triggerDesc: "Translate as soon as you select text, or show a button first.",
+  triggerDesc: "Translate as soon as you select text, or only via right-click / shortcut.",
   triggerAuto: "Show translation after selecting",
-  triggerButton: "Show a translate button first",
+  triggerButton: "Only translate with right-click or Alt+T",
   skipInputs: "Ignore text fields",
   skipInputsDesc: "Do not translate selections inside search boxes, forms, or editors.",
   enableTts: "Enable speech",

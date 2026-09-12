@@ -1,4 +1,4 @@
-import type { Settings, TranslateResult } from "./types.ts";
+import type { Settings, TranslateResult } from "../lib/types.ts";
 import {
   DEFAULTS,
   escapeAttr,
@@ -7,9 +7,9 @@ import {
   languageBanner,
   languageOptionsHtml,
   shouldHideTranslation
-} from "./shared.ts";
-import { t } from "./i18n.ts";
-import { watch } from "./theme.ts";
+} from "../lib/shared.ts";
+import { t } from "../lib/i18n.ts";
+import { watch } from "../lib/theme.ts";
 
 if (!window.__SELECT_TRANSLATE_LOADED__) {
   window.__SELECT_TRANSLATE_LOADED__ = true;
@@ -24,7 +24,8 @@ function boot(): void {
     lastRangeRect: null as DOMRect | null,
     hideTimer: 0,
     requestId: 0,
-    pointer: { x: 0, y: 0, selection: "" }
+    pointer: { x: 0, y: 0, selection: "" },
+    blockedSelection: ""
   };
 
   const host = document.createElement("div");
@@ -41,11 +42,6 @@ function boot(): void {
   const shadow = host.attachShadow({ mode: "closed" });
   shadow.innerHTML = `
     <style>${bubbleStyles()}</style>
-    <button class="fab" hidden>
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 5h9v2H9.7A12.4 12.4 0 0 0 13 12.1l1.6-1.6 1.4 1.4-4 4-1.4-1.4 1.7-1.7A10.4 10.4 0 0 1 8.3 7H4V5zm12.5 3H21v2h-2.2l-2.6 7h-2.2l2.3-6.1L14.2 8h2.3z"/>
-      </svg>
-    </button>
     <div class="card" hidden>
       <div class="arrow"></div>
       <div class="toolbar">
@@ -64,7 +60,6 @@ function boot(): void {
     </div>
   `;
 
-  const fab = must(shadow.querySelector<HTMLButtonElement>(".fab"));
   const card = must(shadow.querySelector<HTMLDivElement>(".card"));
   const arrow = must(shadow.querySelector<HTMLDivElement>(".arrow"));
   const sourceSelect = must(shadow.querySelector<HTMLSelectElement>(".source-lang"));
@@ -84,24 +79,33 @@ function boot(): void {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "sync") return;
     for (const [key, value] of Object.entries(changes)) {
-      (state.settings as unknown as Record<string, unknown>)[key] = value.newValue;
+      const next = value.newValue;
+      if (next === undefined) {
+        if (key in DEFAULTS) {
+          (state.settings as unknown as Record<string, unknown>)[key] =
+            (DEFAULTS as unknown as Record<string, unknown>)[key];
+        }
+        continue;
+      }
+      (state.settings as unknown as Record<string, unknown>)[key] = next;
     }
-    if (changes.sourceLang) sourceSelect.value = String(changes.sourceLang.newValue || "auto");
-    if (changes.targetLang) targetSelect.value = String(changes.targetLang.newValue || "zh-TW");
+    if (changes.sourceLang) sourceSelect.value = String(state.settings.sourceLang || "auto");
+    if (changes.targetLang) targetSelect.value = String(state.settings.targetLang || "zh-TW");
     if (changes.uiLocale) paintChrome();
   });
 
   document.addEventListener("mouseup", onMouseUp, true);
   document.addEventListener("keyup", onKeyUp, true);
   document.addEventListener("mousedown", onMouseDown, true);
+  document.addEventListener("pointerdown", onPointerDown, true);
+  document.addEventListener("click", onDocumentClick, true);
   document.addEventListener("scroll", onScroll, true);
   window.addEventListener("resize", hideUi);
   document.addEventListener("selectionchange", () => {
+    if (state.blockedSelection && selectedText() === state.blockedSelection) return;
     if (!selectedText()) scheduleHide();
   });
 
-  fab.addEventListener("mousedown", (event) => event.preventDefault());
-  fab.addEventListener("click", () => void translateNow(state.lastText));
   closeBtn.addEventListener("click", hideUi);
   optionsBtn.addEventListener("click", () => {
     void chrome.runtime.sendMessage({ type: "OPEN_OPTIONS" });
@@ -138,8 +142,6 @@ function boot(): void {
 
   function paintChrome(): void {
     const locale = state.settings.uiLocale;
-    fab.title = t("bubbleTranslate", locale);
-    fab.setAttribute("aria-label", t("bubbleTranslate", locale));
     sourceSelect.setAttribute("aria-label", t("bubbleSourceLang", locale));
     targetSelect.setAttribute("aria-label", t("bubbleTargetLang", locale));
     swapBtn.title = t("bubbleSwap", locale);
@@ -182,7 +184,7 @@ function boot(): void {
         return;
       }
       if (!moved && next === state.pointer.selection) return;
-      handleSelection(event);
+      handleSelection();
     }, 10);
   }
 
@@ -200,7 +202,32 @@ function boot(): void {
       y: event.clientY,
       selection: selectedText()
     };
+    if (isInteractive(event.target)) {
+      state.blockedSelection = selectedText();
+      hideUi();
+      return;
+    }
+    state.blockedSelection = "";
     hideUi();
+  }
+
+  function onPointerDown(event: PointerEvent): void {
+    if (isInUi(event) || !isInteractive(event.target)) return;
+    state.blockedSelection = selectedText();
+    hideUi();
+  }
+
+  function onDocumentClick(event: MouseEvent): void {
+    if (isInUi(event) || !isInteractive(event.target)) return;
+    state.blockedSelection = selectedText() || state.lastText;
+    hideUi();
+    window.setTimeout(() => {
+      if (state.blockedSelection && selectedText() === state.blockedSelection) {
+        window.getSelection()?.removeAllRanges();
+      }
+      state.blockedSelection = "";
+      state.lastText = "";
+    }, 0);
   }
 
   function onScroll(event: Event): void {
@@ -208,8 +235,12 @@ function boot(): void {
     hideUi();
   }
 
-  function handleSelection(event?: MouseEvent): void {
+  function handleSelection(): void {
     const text = selectedText();
+    if (state.blockedSelection && text === state.blockedSelection) {
+      hideUi();
+      return;
+    }
     if (!text) {
       hideUi();
       return;
@@ -221,11 +252,8 @@ function boot(): void {
       hideUi();
       return;
     }
-    if (state.settings.trigger === "auto") {
-      void translateNow(text);
-      return;
-    }
-    showFab(event);
+    if (state.settings.trigger !== "auto") return;
+    void translateNow(text);
   }
 
   function selectedText(): string {
@@ -255,14 +283,6 @@ function boot(): void {
     );
   }
 
-  function showFab(event?: MouseEvent): void {
-    card.hidden = true;
-    fab.hidden = false;
-    const x = event?.clientX ?? (state.lastRangeRect?.right || 24);
-    const y = event?.clientY ?? (state.lastRangeRect?.bottom || 24);
-    place(fab, x + 8, y + 8);
-  }
-
   async function translateNow(text: string): Promise<void> {
     const query = String(text || "").trim();
     if (!query) return;
@@ -272,7 +292,6 @@ function boot(): void {
     }
     state.lastText = query;
     const requestId = ++state.requestId;
-    fab.hidden = true;
     card.hidden = false;
     body.innerHTML = `<div class="status">${escapeHtml(t("bubbleTranslating", state.settings))}</div>`;
     moreLink.href = googleTranslateUrl(query, sourceSelect.value, targetSelect.value);
@@ -361,13 +380,7 @@ function boot(): void {
     arrow.style.left = `${clamp(arrowLeft, 18, width - 28)}px`;
   }
 
-  function place(el: HTMLElement, clientX: number, clientY: number): void {
-    el.style.left = `${clamp(clientX, 8, window.innerWidth - 44)}px`;
-    el.style.top = `${clamp(clientY, 8, window.innerHeight - 44)}px`;
-  }
-
   function hideUi(): void {
-    fab.hidden = true;
     card.hidden = true;
   }
 
@@ -421,26 +434,10 @@ function bubbleStyles(): string {
       }
       :host([data-theme="dark"]) { color-scheme: dark; }
       * { box-sizing: border-box; font-family: "Google Sans", "Noto Sans", "Segoe UI", Arial, sans-serif; }
-      .fab, .card {
+      .card {
         position: fixed;
         z-index: 2147483647;
         pointer-events: auto;
-      }
-      .fab {
-        width: 32px;
-        height: 32px;
-        border: 0;
-        border-radius: 4px;
-        background: var(--st-surface);
-        box-shadow: var(--st-shadow);
-        cursor: pointer;
-        display: grid;
-        place-items: center;
-        padding: 0;
-      }
-      .fab svg { width: 20px; height: 20px; fill: var(--st-accent); }
-      .fab:hover { background: var(--st-surface2); }
-      .card {
         width: 380px;
         overflow: visible;
         background: var(--st-surface);
@@ -495,7 +492,7 @@ function bubbleStyles(): string {
         margin-bottom: 6px;
       }
       .source, .target { font-size: 16px; line-height: 1.4; word-break: break-word; }
-      .target { color: var(--st-success); font-weight: 500; }
+      .target { color: var(--st-accent); font-weight: 500; }
       .banner {
         color: var(--st-muted);
         font-size: 11px;

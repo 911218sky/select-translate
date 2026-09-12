@@ -12,7 +12,7 @@ Select a word or sentence on any page. The bubble shows the original text, trans
 
 ## Features
 
-- Translate as soon as you select text, or show a button first
+- Translate as soon as you select text, or only via right-click / `Alt+T`
 - Choose source and target languages in the bubble
 - Skip the bubble when the source and target languages match, or the text is already in the target language
 - Speak with Google Translate’s voice (`translate.google.com/translate_tts`)
@@ -71,11 +71,31 @@ If the source and target languages are the same, the bubble stays hidden.
 ```bash
 npm test          # parser, theme, i18n, and TTS URL tests
 npm run typecheck # TypeScript
-npm run build     # bundle src/*.ts into src/*.js
-npm run pack      # tests-ready zip in dist/
+npm run build     # bundle src/*/index.ts into src/*/index.js
+npm run pack      # release zip in dist/
+npm run icons     # regenerate PNG icons from icons/icon.svg
 ```
 
-Source is TypeScript under `src/`. `esbuild` bundles each entry into an IIFE that Chrome can load.
+### Layout
+
+```text
+src/                 extension source
+  background/        service worker
+  content/           page bubble
+  popup/             toolbar popup
+  options/           settings page
+  offscreen/         TTS playback
+  lib/               shared types, i18n, theme, LLM, helpers
+  styles/            shared CSS
+icons/               shipped extension icons
+_locales/            Chrome store / manifest strings
+scripts/             build + icon tooling
+tests/               unit tests
+examples/            local demo page
+design/              design drafts (not packaged)
+```
+
+`esbuild` bundles each entry into an IIFE that Chrome can load. `_locales/` and `icons/` stay at the repo root because Chrome expects them next to `manifest.json`.
 
 ## License
 

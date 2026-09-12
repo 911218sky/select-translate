@@ -1,10 +1,10 @@
-import type { ExtensionMessage, MessageResponse, Secrets, Settings, TranslateResult } from "./types.ts";
-import { DEFAULTS, GOOGLE_TTS_LIMIT, googleTtsUrl, normalizeLang, parseGoogleResult, toStorage, ttsLang } from "./shared.ts";
-import { llmOrigin, resolveLlmConfig, translateWithLlm } from "./llm.ts";
-import { t } from "./i18n.ts";
+import type { ExtensionMessage, MessageResponse, Secrets, Settings, TranslateResult } from "../lib/types.ts";
+import { DEFAULTS, GOOGLE_TTS_LIMIT, googleTtsUrl, normalizeLang, parseGoogleResult, toStorage, ttsLang } from "../lib/shared.ts";
+import { listLlmModels, llmOrigin, resolveLlmConfig, testLlmConnection, translateWithLlm } from "../lib/llm.ts";
+import { t } from "../lib/i18n.ts";
 
 const MENU_ID = "select-translate-selection";
-const OFFSCREEN_PATH = "src/offscreen.html";
+const OFFSCREEN_PATH = "src/offscreen/index.html";
 let creatingOffscreen: Promise<void> | null = null;
 let menuQueue: Promise<void> = Promise.resolve();
 
@@ -127,6 +127,20 @@ async function handleMessage(message: ExtensionMessage, sender: chrome.runtime.M
     await chrome.storage.local.set({ llmApiKey: String(message.llmApiKey || "") });
     return { ok: true, secrets: await readSecrets() };
   }
+  if (message?.type === "LIST_LLM_MODELS") {
+    const secrets = await readSecrets();
+    const { endpoint } = resolveLlmConfig(settings);
+    await ensureHostAccess(endpoint, settings);
+    const models = await listLlmModels(settings, secrets.llmApiKey);
+    return { ok: true, models };
+  }
+  if (message?.type === "TEST_LLM") {
+    const secrets = await readSecrets();
+    const { endpoint } = resolveLlmConfig(settings);
+    await ensureHostAccess(endpoint, settings);
+    const result = await testLlmConnection(settings, secrets.llmApiKey);
+    return { ok: true, result };
+  }
   throw new Error(t("errorUnknown", settings));
 }
 
@@ -136,7 +150,7 @@ async function sendToTab(tabId: number, payload: ExtensionMessage): Promise<void
   } catch {
     await chrome.scripting.executeScript({
       target: { tabId },
-      files: ["src/content.js"]
+      files: ["src/content/index.js"]
     });
     await chrome.tabs.sendMessage(tabId, payload);
   }
