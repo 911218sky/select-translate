@@ -104,16 +104,20 @@ export interface SpeakMessage {
 
 export interface OffscreenSpeakMessage {
   type: "OFFSCREEN_SPEAK";
-  /** Legacy inline audio; prefer sessionKey to avoid broadcasting large payloads. */
+  /** Prefer fetching via GET_TTS_AUDIO — offscreen cannot use chrome.storage. */
   audio?: string;
-  /** Key in chrome.storage.session holding a data-URL or empty for speechSynthesis fallback. */
-  sessionKey?: string;
+  /** When true, offscreen should request audio from the service worker. */
+  hasAudio?: boolean;
   text?: string;
   lang?: string;
 }
 
 export interface OffscreenPingMessage {
   type: "OFFSCREEN_PING";
+}
+
+export interface GetTtsAudioMessage {
+  type: "GET_TTS_AUDIO";
 }
 
 export interface TranslateSelectionMessage {
@@ -148,6 +152,7 @@ export type ExtensionMessage =
   | SpeakMessage
   | OffscreenSpeakMessage
   | OffscreenPingMessage
+  | GetTtsAudioMessage
   | TranslateSelectionMessage
   | GetSecretsMessage
   | SaveSecretsMessage
@@ -166,6 +171,7 @@ export interface OkResponse<T = unknown> {
   theme?: ChromeThemeLike | null;
   tabId?: number | null;
   models?: string[];
+  audio?: string;
 }
 
 export interface ErrorResponse {

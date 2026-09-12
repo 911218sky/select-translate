@@ -19,7 +19,6 @@ const FETCH_TIMEOUT_MS = 20_000;
 const BACKUP_TIMEOUT_MS = 8_000;
 const OFFSCREEN_READY_ATTEMPTS = 5;
 const OFFSCREEN_IDLE_MS = 5 * 60_000;
-const TTS_SESSION_KEY = "stTtsAudio";
 
 let creatingOffscreen: Promise<void> | null = null;
 let menuQueue: Promise<void> = Promise.resolve();
@@ -27,6 +26,8 @@ let closeOffscreenTimer = 0;
 let cachedSettings: Settings | null = null;
 let settingsLoad: Promise<Settings> | null = null;
 let activeTranslate: { key: string; controller: AbortController } | null = null;
+/** In-memory TTS payload for offscreen fetch — avoids chrome.storage in offscreen docs. */
+let pendingTtsAudio: string | undefined;
 
 async function readSettings(): Promise<Settings> {
   if (cachedSettings) return cachedSettings;
@@ -57,6 +58,11 @@ async function readSecrets(): Promise<Secrets> {
 function isTrustedExtensionPage(sender: chrome.runtime.MessageSender): boolean {
   const url = sender.url || "";
   return url.startsWith(chrome.runtime.getURL("/"));
+}
+
+function isOffscreenSender(sender: chrome.runtime.MessageSender): boolean {
+  const url = sender.url || "";
+  return url.startsWith(chrome.runtime.getURL(OFFSCREEN_PATH));
 }
 
 function queueContextMenu(): void {
@@ -161,6 +167,13 @@ async function handleMessage(message: ExtensionMessage, sender: chrome.runtime.M
     } catch {
       return { ok: true, theme: null };
     }
+  }
+  if (message?.type === "GET_TTS_AUDIO") {
+    // Offscreen documents cannot use chrome.storage; only they should pull audio.
+    if (sender.tab || !isOffscreenSender(sender)) {
+      throw new Error("forbidden");
+    }
+    return { ok: true, audio: pendingTtsAudio || "" };
   }
 
   const settings = await readSettings();
@@ -404,23 +417,24 @@ async function speakText(text: string, lang: string | undefined, settings: Setti
   if (!utterance) return;
   const audio = await fetchGoogleTts(utterance, lang);
   await ensureOffscreenReady(settings);
-  // Keep large audio out of runtime.sendMessage broadcast — content frames only see a tiny envelope.
-  await chrome.storage.session.set({ [TTS_SESSION_KEY]: audio || "" });
-  const response = await sendOffscreenSpeak(
-    {
-      type: "OFFSCREEN_SPEAK",
-      sessionKey: TTS_SESSION_KEY,
-      text: audio ? undefined : truncateCodePoints(utterance, GOOGLE_TTS_LIMIT),
-      lang: ttsLang(lang)
-    },
-    settings
-  );
-  scheduleCloseOffscreen();
-  void chrome.storage.session.remove(TTS_SESSION_KEY).catch(() => {
-    /* ignore */
-  });
-  if (!response?.ok) {
-    throw new Error(response?.error || t("errorSpeak", settings));
+  // Keep large audio out of the broadcast envelope; offscreen pulls it via GET_TTS_AUDIO.
+  pendingTtsAudio = audio || "";
+  try {
+    const response = await sendOffscreenSpeak(
+      {
+        type: "OFFSCREEN_SPEAK",
+        hasAudio: Boolean(audio),
+        text: audio ? undefined : truncateCodePoints(utterance, GOOGLE_TTS_LIMIT),
+        lang: ttsLang(lang)
+      },
+      settings
+    );
+    scheduleCloseOffscreen();
+    if (!response?.ok) {
+      throw new Error(response?.error || t("errorSpeak", settings));
+    }
+  } finally {
+    pendingTtsAudio = undefined;
   }
 }
 
