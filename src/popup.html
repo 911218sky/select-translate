@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <title>選字翻譯</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="popup">
+    <header>
+      <img src="../icons/icon32.png" alt="" />
+      <div>
+        <h1 data-i18n="extName">選字翻譯</h1>
+        <p data-i18n="extTagline">選取網頁文字，或在這裡直接翻譯。</p>
+      </div>
+    </header>
+    <label for="sourceText" data-i18n="popupSource">原文</label>
+    <textarea id="sourceText" rows="4" data-i18n-placeholder="popupSourcePlaceholder" placeholder="貼上或輸入要翻譯的文字"></textarea>
+    <div class="row">
+      <label>
+        <span data-i18n="popupFrom">來源</span>
+        <select id="sourceLang"></select>
+      </label>
+      <button id="swap" type="button" data-i18n-title="popupSwap" title="交換語言">⇄</button>
+      <label>
+        <span data-i18n="popupTo">目標</span>
+        <select id="targetLang"></select>
+      </label>
+    </div>
+    <button id="translate" class="primary" type="button" data-i18n="popupTranslate">翻譯</button>
+    <div id="result" class="result" hidden></div>
+    <p id="error" class="error" hidden></p>
+    <a id="options" href="options.html" data-i18n="popupOpenOptions">開啟設定</a>
+    <script src="popup.js"></script>
+  </body>
+</html>

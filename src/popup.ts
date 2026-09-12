@@ -1,0 +1,87 @@
+import type { Settings, TranslateResult } from "./types.ts";
+import { DEFAULTS, escapeHtml, languageName, languageOptionsHtml, toStorage } from "./shared.ts";
+import { applyDomI18n, t } from "./i18n.ts";
+import { watch } from "./theme.ts";
+
+const sourceText = must(document.getElementById("sourceText") as HTMLTextAreaElement | null);
+const sourceLang = must(document.getElementById("sourceLang") as HTMLSelectElement | null);
+const targetLang = must(document.getElementById("targetLang") as HTMLSelectElement | null);
+const result = must(document.getElementById("result"));
+const errorBox = must(document.getElementById("error"));
+
+let uiLocale = DEFAULTS.uiLocale;
+
+void chrome.storage.sync.get(toStorage(DEFAULTS)).then((stored) => {
+  const settings = { ...DEFAULTS, ...(stored as unknown as Partial<Settings>) };
+  uiLocale = settings.uiLocale || "auto";
+  applyDomI18n(document, settings);
+  document.documentElement.lang = uiLocale === "en" ? "en" : "zh-Hant";
+  document.title = t("extName", settings);
+  sourceLang.innerHTML = languageOptionsHtml(true, uiLocale);
+  targetLang.innerHTML = languageOptionsHtml(false, uiLocale);
+  sourceLang.value = settings.sourceLang || "auto";
+  targetLang.value = settings.targetLang || "zh-TW";
+});
+watch();
+
+document.getElementById("translate")?.addEventListener("click", () => {
+  void translate();
+});
+document.getElementById("swap")?.addEventListener("click", () => {
+  if (sourceLang.value === "auto") return;
+  const currentSource = sourceLang.value;
+  sourceLang.value = targetLang.value;
+  targetLang.value = currentSource;
+});
+sourceText.addEventListener("keydown", (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void translate();
+});
+
+async function translate(): Promise<void> {
+  const text = sourceText.value.trim();
+  errorBox.hidden = true;
+  result.hidden = true;
+  if (!text) {
+    showError(t("popupNeedText", uiLocale));
+    return;
+  }
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "TRANSLATE",
+      text,
+      sourceLang: sourceLang.value,
+      targetLang: targetLang.value
+    });
+    if (!response?.ok) throw new Error(response?.error || t("popupFailed", uiLocale));
+    const data = response.result as TranslateResult;
+    result.hidden = false;
+    result.innerHTML = `
+      <div class="translated">${escapeHtml(data.translated)}</div>
+      <div class="meta">${escapeHtml(languageName(data.sourceLang, uiLocale))} → ${escapeHtml(languageName(data.targetLang, uiLocale))}</div>
+      <button class="speak-btn" type="button">${escapeHtml(t("popupSpeak", uiLocale))}</button>
+    `;
+    result.querySelector(".speak-btn")?.addEventListener("click", () => {
+      void chrome.runtime.sendMessage({
+        type: "SPEAK",
+        text: data.translated,
+        lang: data.targetLang
+      });
+    });
+    void chrome.storage.sync.set({
+      sourceLang: sourceLang.value,
+      targetLang: targetLang.value
+    });
+  } catch (error) {
+    showError(error instanceof Error ? error.message : t("popupFailed", uiLocale));
+  }
+}
+
+function showError(message: string): void {
+  errorBox.hidden = false;
+  errorBox.textContent = message;
+}
+
+function must<T>(value: T | null): T {
+  if (!value) throw new Error("Missing popup element");
+  return value;
+}

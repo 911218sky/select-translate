@@ -1,0 +1,11 @@
+{
+  "extName": {
+    "message": "Select Translate"
+  },
+  "extDescription": {
+    "message": "Select text on any page to translate it in a Google Translate-style popup."
+  },
+  "commandTranslate": {
+    "message": "Translate selected text"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "extName": {
+    "message": "選字翻譯"
+  },
+  "extDescription": {
+    "message": "在網頁上選取文字，以 Google 翻譯風格的氣泡顯示譯文、詞性與朗讀。"
+  },
+  "commandTranslate": {
+    "message": "翻譯選取文字"
+  }
+}
