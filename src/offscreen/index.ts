@@ -28,10 +28,15 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
 async function play(message: OffscreenSpeakMessage): Promise<void> {
   stop();
   let audio = message.audio;
-  if (!audio && message.sessionKey) {
-    const stored = (await chrome.storage.session.get(message.sessionKey)) as Record<string, unknown>;
-    const value = stored[message.sessionKey];
-    audio = typeof value === "string" && value ? value : undefined;
+  // Offscreen documents cannot use chrome.storage — pull audio from the service worker instead.
+  if (!audio && message.hasAudio) {
+    const response = (await chrome.runtime.sendMessage({ type: "GET_TTS_AUDIO" })) as
+      | { ok?: boolean; audio?: string; error?: string }
+      | undefined;
+    if (!response?.ok) {
+      throw new Error(response?.error || "No audio available");
+    }
+    audio = typeof response.audio === "string" && response.audio ? response.audio : undefined;
   }
   if (audio) {
     currentAudio = new Audio(audio);
