@@ -42,9 +42,12 @@ export type MessageKey =
   | "llmModelCustom"
   | "errorLlmConfig"
   | "errorLlmHttp"
+  | "errorLlmHttpDetail"
   | "errorLlmEmpty"
   | "errorLlmPermission"
+  | "errorLlmNetwork"
   | "errorLlmNotJson"
+  | "errorLlmEndpoint"
   | "translation"
   | "targetLang"
   | "targetLangDesc"
@@ -92,6 +95,8 @@ export type MessageKey =
   | "errorBackup"
   | "errorMissing"
   | "errorUnknown"
+  | "errorTimeout"
+  | "errorSpeak"
   | "warningFallback";
 
 type Catalog = Record<MessageKey, string>;
@@ -136,11 +141,14 @@ const ZH: Catalog = {
   llmFetchEmpty: "節點沒有回傳可用模型",
   llmTestOk: "連線成功。試譯：「$RESULT$」",
   llmModelCustom: "自訂（下方輸入）",
-  errorLlmConfig: "請先在設定裡填寫 LLM 節點與金鑰",
+  errorLlmConfig: "請先在設定裡填寫有效的 LLM 節點（需含 http:// 或 https://）",
   errorLlmHttp: "LLM 節點回應失敗（$STATUS$）",
+  errorLlmHttpDetail: "LLM 節點回應失敗（$STATUS$）：$DETAIL$",
   errorLlmEmpty: "LLM 沒有回傳譯文",
   errorLlmPermission: "沒有權限連到這個 LLM 節點",
+  errorLlmNetwork: "無法連線到這個 LLM 節點，請確認網址與網路",
   errorLlmNotJson: "節點回傳的不是 JSON，請確認 API 節點網址是否正確",
+  errorLlmEndpoint: "API 節點網址無效，請使用完整的 http:// 或 https:// 網址",
   translation: "翻譯",
   targetLang: "目標語言",
   targetLangDesc: "選取文字後預設翻成這個語言。",
@@ -180,14 +188,16 @@ const ZH: Catalog = {
   bubbleTranslating: "翻譯中…",
   bubbleSpeakSource: "朗讀原文",
   bubbleSpeakTarget: "朗讀譯文",
-  bubbleOptions: "EXTENSION OPTIONS",
-  bubbleMore: "MORE »",
+  bubbleOptions: "擴充功能選項",
+  bubbleMore: "更多 »",
   contextMenu: "翻譯「%s」",
   errorEmpty: "沒有可翻譯的文字",
   errorGoogle: "Google 翻譯暫時無法使用（$STATUS$）",
   errorBackup: "備用翻譯來源也失敗了",
   errorMissing: "找不到譯文",
   errorUnknown: "未知的訊息類型",
+  errorTimeout: "翻譯逾時，請再試一次",
+  errorSpeak: "無法朗讀，請稍後再試",
   warningFallback: "已改用備用翻譯來源"
 };
 
@@ -231,11 +241,14 @@ const EN: Catalog = {
   llmFetchEmpty: "The node returned no models",
   llmTestOk: "Connected. Sample: “$RESULT$”",
   llmModelCustom: "Custom (type below)",
-  errorLlmConfig: "Add an LLM endpoint and key in settings first",
+  errorLlmConfig: "Enter a valid LLM endpoint in settings (must include http:// or https://)",
   errorLlmHttp: "The LLM endpoint failed ($STATUS$)",
+  errorLlmHttpDetail: "The LLM endpoint failed ($STATUS$): $DETAIL$",
   errorLlmEmpty: "The LLM returned no translation",
   errorLlmPermission: "This extension cannot reach that LLM endpoint",
+  errorLlmNetwork: "Could not connect to the LLM endpoint. Check the URL and network.",
   errorLlmNotJson: "The endpoint returned HTML/text instead of JSON. Check the API URL.",
+  errorLlmEndpoint: "Invalid API endpoint. Use a full http:// or https:// URL.",
   translation: "Translation",
   targetLang: "Target language",
   targetLangDesc: "Selected text is translated into this language by default.",
@@ -283,6 +296,8 @@ const EN: Catalog = {
   errorBackup: "The fallback translator also failed",
   errorMissing: "No translation found",
   errorUnknown: "Unknown message type",
+  errorTimeout: "Translation timed out. Please try again.",
+  errorSpeak: "Could not play speech. Please try again.",
   warningFallback: "Using the fallback translator"
 };
 

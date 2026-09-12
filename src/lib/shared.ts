@@ -208,10 +208,17 @@ export function ttsLang(code?: string | null): string {
 
 export const GOOGLE_TTS_LIMIT = 180;
 
+/** Truncate by Unicode code points (avoids splitting surrogate pairs). */
+export function truncateCodePoints(text: string, max: number): string {
+  const value = String(text || "");
+  if (max <= 0 || value.length <= max) return value;
+  return Array.from(value).slice(0, max).join("");
+}
+
 export function googleTtsUrl(text: string, lang?: string | null): string {
   const params = new URLSearchParams({
     ie: "UTF-8",
-    q: String(text || "").slice(0, GOOGLE_TTS_LIMIT),
+    q: truncateCodePoints(text, GOOGLE_TTS_LIMIT),
     tl: ttsLang(lang),
     client: "tw-ob"
   });
@@ -340,7 +347,9 @@ export function parseGoogleResult(
 
   return {
     original: sourceText,
-    translated: translated || original,
+    // Keep empty when Google returned no sentences — callers must treat as error,
+    // not as a no-op hide (translated === original).
+    translated,
     sourceLang: detected === "auto" ? sl : detected,
     targetLang: tl,
     dictionary,

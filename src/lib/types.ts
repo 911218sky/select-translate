@@ -92,6 +92,8 @@ export interface TranslateMessage {
   text: string;
   sourceLang?: string;
   targetLang?: string;
+  /** Client request id used to cancel superseded in-flight translates. */
+  requestId?: number;
 }
 
 export interface SpeakMessage {
@@ -102,9 +104,16 @@ export interface SpeakMessage {
 
 export interface OffscreenSpeakMessage {
   type: "OFFSCREEN_SPEAK";
+  /** Legacy inline audio; prefer sessionKey to avoid broadcasting large payloads. */
   audio?: string;
+  /** Key in chrome.storage.session holding a data-URL or empty for speechSynthesis fallback. */
+  sessionKey?: string;
   text?: string;
   lang?: string;
+}
+
+export interface OffscreenPingMessage {
+  type: "OFFSCREEN_PING";
 }
 
 export interface TranslateSelectionMessage {
@@ -118,7 +127,8 @@ export interface GetSecretsMessage {
 
 export interface SaveSecretsMessage {
   type: "SAVE_SECRETS";
-  llmApiKey?: string;
+  /** Required when saving; omit is rejected so keys are not cleared by accident. */
+  llmApiKey: string;
 }
 
 export interface ListLlmModelsMessage {
@@ -137,6 +147,7 @@ export type ExtensionMessage =
   | TranslateMessage
   | SpeakMessage
   | OffscreenSpeakMessage
+  | OffscreenPingMessage
   | TranslateSelectionMessage
   | GetSecretsMessage
   | SaveSecretsMessage
@@ -166,6 +177,9 @@ export type MessageResponse<T = unknown> = OkResponse<T> | ErrorResponse;
 
 declare global {
   interface Window {
-    __SELECT_TRANSLATE_LOADED__?: boolean;
+    /** Extension version stamp — avoids blocking reinjection after updates. */
+    __SELECT_TRANSLATE_LOADED__?: string;
+    /** Tear down listeners/DOM from a previous boot (upgrade path). */
+    __SELECT_TRANSLATE_CLEANUP__?: () => void;
   }
 }

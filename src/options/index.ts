@@ -73,12 +73,15 @@ sourceLang.addEventListener("change", () => void save({ sourceLang: sourceLang.v
 trigger.addEventListener("change", () => void save({ trigger: trigger.value as Settings["trigger"] }));
 translator.addEventListener("change", () => {
   void (async () => {
+    const previous = settings.translator;
     const next = translator.value as Translator;
     const granted = next === "llm" ? await requestLlmOriginNow() : true;
-    await save({ translator: next });
     if (next === "llm" && !granted) {
+      translator.value = previous;
       setLlmStatus("error", t("errorLlmPermission", settings));
+      return;
     }
+    await save({ translator: next });
   })();
 });
 llmProvider.addEventListener("change", () => {
@@ -100,7 +103,13 @@ llmEndpoint.addEventListener("change", () => {
   setLlmStatus("info", "");
   paintModelList();
   void (async () => {
-    const endpoint = sanitizeHttpUrl(llmEndpoint.value);
+    const raw = llmEndpoint.value.trim();
+    const endpoint = raw ? sanitizeHttpUrl(raw) : "";
+    if (raw && !endpoint) {
+      llmEndpoint.value = settings.llmEndpoint;
+      setLlmStatus("error", t("errorLlmEndpoint", settings));
+      return;
+    }
     const granted = await requestLlmOriginNow();
     await save({ llmEndpoint: endpoint });
     if ((translator.value as Translator) === "llm" && !granted) {
@@ -120,6 +129,10 @@ llmModel.addEventListener("change", () => {
   syncModelSelect(value);
 });
 llmApiKey.addEventListener("change", () => void saveSecrets(llmApiKey.value.trim()));
+llmApiKey.addEventListener("blur", () => {
+  const value = llmApiKey.value.trim();
+  if (value !== secrets.llmApiKey) void saveSecrets(value);
+});
 uiLocale.addEventListener("change", () => void save({ uiLocale: uiLocale.value as Settings["uiLocale"] }));
 skipInputs.addEventListener("change", () => void save({ skipInputs: skipInputs.checked }));
 enableTts.addEventListener("change", () => void save({ enableTts: enableTts.checked }));
@@ -140,8 +153,9 @@ async function save(patch: Partial<Settings>): Promise<void> {
 /** Request host access as the first await so the user gesture is still valid. */
 async function requestLlmOriginNow(): Promise<boolean> {
   if ((translator.value as Translator) !== "llm") return true;
-  const endpoint =
-    sanitizeHttpUrl(llmEndpoint.value) || llmDefaults(llmProvider.value as LlmProvider).endpoint;
+  const raw = llmEndpoint.value.trim();
+  const endpoint = raw ? sanitizeHttpUrl(raw) : llmDefaults(llmProvider.value as LlmProvider).endpoint;
+  if (!endpoint) return false;
   try {
     const origin = `${new URL(endpoint).origin}/*`;
     return Boolean(await chrome.permissions.request({ origins: [origin] }));
@@ -152,7 +166,11 @@ async function requestLlmOriginNow(): Promise<boolean> {
 
 async function saveSecrets(value: string): Promise<void> {
   secrets = { llmApiKey: value };
-  await chrome.runtime.sendMessage({ type: "SAVE_SECRETS", llmApiKey: value });
+  const response = await chrome.runtime.sendMessage({ type: "SAVE_SECRETS", llmApiKey: value });
+  if (!response?.ok) {
+    setLlmStatus("error", response?.error || t("errorUnknown", settings));
+    return;
+  }
   showToast();
 }
 
@@ -165,7 +183,13 @@ async function runLlmAction(kind: "list" | "test"): Promise<void> {
     const patch: Partial<Settings> = {
       translator: translator.value as Translator,
       llmProvider: llmProvider.value as LlmProvider,
-      llmEndpoint: sanitizeHttpUrl(llmEndpoint.value),
+      llmEndpoint: (() => {
+        const raw = llmEndpoint.value.trim();
+        if (!raw) return "";
+        const endpoint = sanitizeHttpUrl(raw);
+        if (!endpoint) throw new Error(t("errorLlmEndpoint", settings));
+        return endpoint;
+      })(),
       llmModel: llmModel.value.trim()
     };
     settings = { ...settings, ...patch };

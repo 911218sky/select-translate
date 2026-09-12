@@ -66,11 +66,20 @@ async function translate(): Promise<void> {
       <button class="speak-btn" type="button">${escapeHtml(t("popupSpeak", uiLocale))}</button>
     `;
     result.querySelector(".speak-btn")?.addEventListener("click", () => {
-      void chrome.runtime.sendMessage({
-        type: "SPEAK",
-        text: data.translated,
-        lang: data.targetLang
-      });
+      void (async () => {
+        try {
+          const speakResponse = await chrome.runtime.sendMessage({
+            type: "SPEAK",
+            text: data.translated,
+            lang: data.targetLang
+          });
+          if (speakResponse && speakResponse.ok === false) {
+            throw new Error(speakResponse.error || t("errorSpeak", uiLocale));
+          }
+        } catch (error) {
+          showError(error instanceof Error ? error.message : t("errorSpeak", uiLocale));
+        }
+      })();
     });
     void chrome.storage.sync.set({
       sourceLang: sourceLang.value,
