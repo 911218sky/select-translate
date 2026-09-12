@@ -16,6 +16,7 @@ import {
   sanitizeHttpUrl,
   shouldHideTranslation,
   stripTags,
+  textLooksLikeLanguage,
   truncateCodePoints,
   ttsLang,
   unique
@@ -42,6 +43,12 @@ test("language helpers", () => {
   assert.equal(shouldHideTranslation("zh-TW", "zh-TW"), true);
   assert.equal(shouldHideTranslation("en", "zh-TW", "hello", "hello"), true);
   assert.equal(shouldHideTranslation("en", "zh-TW", "hello", "你好"), false);
+  assert.equal(textLooksLikeLanguage("這是一段中文內容", "zh-TW"), true);
+  assert.equal(textLooksLikeLanguage("這是一段中文內容", "en"), false);
+  assert.equal(textLooksLikeLanguage("This is English text", "en"), true);
+  assert.equal(textLooksLikeLanguage("This is English text", "zh-TW"), false);
+  assert.equal(shouldHideTranslation("auto", "zh-TW", "這是中文"), true);
+  assert.equal(shouldHideTranslation("auto", "zh-TW", "Hello world"), false);
   assert.equal(truncateCodePoints("hello😀world", 6), "hello😀");
   assert.equal(truncateCodePoints("hi", 10), "hi");
   assert.equal(sanitizeHttpUrl("https://api.example.com/v1/chat"), "https://api.example.com/v1/chat");

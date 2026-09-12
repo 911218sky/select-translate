@@ -39,6 +39,7 @@ function boot(): void {
     commandGuardUntil: 0,
     cachedCardHeight: 220,
     languagesFilled: false,
+    pickingLanguageUntil: 0,
     pointer: { x: 0, y: 0, selection: "" },
     blockedSelection: ""
   };
@@ -127,23 +128,33 @@ function boot(): void {
   document.addEventListener("selectionchange", onSelectionChange, { signal });
   document.addEventListener("keydown", onKeyDown, { signal });
 
-  closeBtn.addEventListener("click", hideUi, { signal });
+  closeBtn.addEventListener("click", () => {
+    state.pickingLanguageUntil = 0;
+    hideUi();
+  }, { signal });
   optionsBtn.addEventListener("click", () => {
     void chrome.runtime.sendMessage({ type: "OPEN_OPTIONS" });
   }, { signal });
+  sourceSelect.addEventListener("mousedown", beginLanguagePick, { capture: true, signal });
+  targetSelect.addEventListener("mousedown", beginLanguagePick, { capture: true, signal });
+  sourceSelect.addEventListener("focus", beginLanguagePick, { signal });
+  targetSelect.addEventListener("focus", beginLanguagePick, { signal });
   sourceSelect.addEventListener("change", async () => {
+    beginLanguagePick();
     syncSwapState();
     state.settings.sourceLang = sourceSelect.value;
     await chrome.storage.sync.set({ sourceLang: sourceSelect.value });
-    if (state.lastText) await translateNow(state.lastText);
+    if (state.lastText) await translateNow(state.lastText, { quiet: true, retain: true });
   }, { signal });
   targetSelect.addEventListener("change", async () => {
+    beginLanguagePick();
     state.settings.targetLang = targetSelect.value;
     await chrome.storage.sync.set({ targetLang: targetSelect.value });
-    if (state.lastText) await translateNow(state.lastText);
+    if (state.lastText) await translateNow(state.lastText, { quiet: true, retain: true });
   }, { signal });
   swapBtn.addEventListener("click", async () => {
     if (sourceSelect.value === "auto") return;
+    beginLanguagePick();
     const nextSource = targetSelect.value;
     const nextTarget = sourceSelect.value;
     sourceSelect.value = nextSource;
@@ -152,8 +163,25 @@ function boot(): void {
     state.settings.targetLang = nextTarget;
     syncSwapState();
     await chrome.storage.sync.set({ sourceLang: nextSource, targetLang: nextTarget });
-    if (state.lastText) await translateNow(state.lastText);
+    if (state.lastText) await translateNow(state.lastText, { quiet: true, retain: true });
   }, { signal });
+
+  function beginLanguagePick(): void {
+    // Native <select> menus render outside the shadow host; keep the bubble
+    // alive while the user is choosing a language option.
+    state.pickingLanguageUntil = Date.now() + 2000;
+    window.clearTimeout(state.hideTimer);
+    state.hideTimer = 0;
+  }
+
+  function isPickingLanguage(): boolean {
+    return Date.now() < state.pickingLanguageUntil;
+  }
+
+  function isBubbleActive(): boolean {
+    // Closed shadow: focus inside the card surfaces as the host being activeElement.
+    return !card.hidden && (document.activeElement === host || isPickingLanguage());
+  }
 
   function syncSwapState(): void {
     const disabled = sourceSelect.value === "auto";
@@ -222,7 +250,7 @@ function boot(): void {
 
   function onMouseUp(event: MouseEvent): void {
     if (event.button !== 0) return;
-    if (isInUi(event)) return;
+    if (isInUi(event) || isPickingLanguage()) return;
     const dx = event.clientX - state.pointer.x;
     const dy = event.clientY - state.pointer.y;
     const moved = dx * dx + dy * dy > 36;
@@ -236,6 +264,7 @@ function boot(): void {
     window.clearTimeout(state.mouseUpTimer);
     state.mouseUpTimer = window.setTimeout(() => {
       state.mouseUpTimer = 0;
+      if (isPickingLanguage()) return;
       const next = selectedText();
       if (!next) {
         hideUi();
@@ -251,11 +280,12 @@ function boot(): void {
       return;
     }
     if (Date.now() < state.commandGuardUntil) return;
+    if (isPickingLanguage()) return;
     handleSelection();
   }
 
   function onMouseDown(event: MouseEvent): void {
-    if (isInUi(event)) return;
+    if (isInUi(event) || isPickingLanguage()) return;
     state.pointer = {
       x: event.clientX,
       y: event.clientY,
@@ -271,13 +301,13 @@ function boot(): void {
   }
 
   function onPointerDown(event: PointerEvent): void {
-    if (isInUi(event) || !isInteractive(event.target)) return;
+    if (isInUi(event) || isPickingLanguage() || !isInteractive(event.target)) return;
     state.blockedSelection = selectedText();
     hideUi();
   }
 
   function onDocumentClick(event: MouseEvent): void {
-    if (isInUi(event) || !isInteractive(event.target)) return;
+    if (isInUi(event) || isPickingLanguage() || !isInteractive(event.target)) return;
     state.blockedSelection = selectedText() || state.lastText;
     hideUi();
     window.setTimeout(() => {
@@ -306,12 +336,17 @@ function boot(): void {
 
   function onSelectionChange(): void {
     if (card.hidden && !state.autoTimer) return;
+    // Picking source/target language clears page selection — don't dismiss the bubble.
+    if (isBubbleActive()) return;
     if (state.blockedSelection && selectedText() === state.blockedSelection) return;
     if (!selectedText()) scheduleHide();
   }
 
   function onKeyDown(event: KeyboardEvent): void {
-    if (event.key === "Escape" && !card.hidden) hideUi();
+    if (event.key === "Escape" && !card.hidden) {
+      state.pickingLanguageUntil = 0;
+      hideUi();
+    }
   }
 
   function handleSelection(): void {
@@ -327,7 +362,13 @@ function boot(): void {
     if (state.settings.skipInputs && isEditable(document.activeElement)) return;
     captureSelection();
     state.lastText = text;
-    if (shouldHideTranslation(sourceSelect.value || state.settings.sourceLang, targetSelect.value || state.settings.targetLang)) {
+    if (
+      shouldHideTranslation(
+        sourceSelect.value || state.settings.sourceLang,
+        targetSelect.value || state.settings.targetLang,
+        text
+      )
+    ) {
       hideUi();
       return;
     }
@@ -412,11 +453,21 @@ function boot(): void {
     );
   }
 
-  async function translateNow(text: string): Promise<void> {
+  async function translateNow(
+    text: string,
+    options: { quiet?: boolean; retain?: boolean } = {}
+  ): Promise<void> {
     const query = String(text || "").trim();
     if (!query) return;
-    if (shouldHideTranslation(sourceSelect.value || state.settings.sourceLang, targetSelect.value || state.settings.targetLang)) {
-      hideUi();
+    const sourceLang = sourceSelect.value || state.settings.sourceLang;
+    const targetLang = targetSelect.value || state.settings.targetLang;
+    // Already in the target language (e.g. target=zh-TW + Chinese selection) — never flash UI.
+    if (shouldHideTranslation(sourceLang, targetLang, query)) {
+      state.pickingLanguageUntil = 0;
+      clearAutoTimer();
+      delete card.dataset.busy;
+      card.hidden = true;
+      state.requestId += 1;
       return;
     }
     clearAutoTimer();
@@ -424,22 +475,27 @@ function boot(): void {
     state.lastText = query;
     const requestId = ++state.requestId;
     card.hidden = false;
-    body.innerHTML = `
-      <div class="block" data-no-speak="1">
-        <div class="source">${escapeHtml(query)}</div>
-      </div>
-      <div class="status" role="status" aria-live="polite">${escapeHtml(t("bubbleTranslating", state.settings))}</div>
-    `;
-    moreLink.href = googleTranslateUrl(query, sourceSelect.value, targetSelect.value);
-    placeCard();
+    moreLink.href = googleTranslateUrl(query, sourceLang, targetLang);
+    // Quiet mode (language change): keep current result visible — no "Translating…" flash.
+    if (!options.quiet) {
+      body.innerHTML = `
+        <div class="block" data-no-speak="1">
+          <div class="source">${escapeHtml(query)}</div>
+        </div>
+        <div class="status" role="status" aria-live="polite">${escapeHtml(t("bubbleTranslating", state.settings))}</div>
+      `;
+      placeCard();
+    } else {
+      card.dataset.busy = "1";
+    }
 
     try {
       const response = await withTimeout(
         chrome.runtime.sendMessage({
           type: "TRANSLATE",
           text: query,
-          sourceLang: sourceSelect.value || state.settings.sourceLang,
-          targetLang: targetSelect.value || state.settings.targetLang,
+          sourceLang,
+          targetLang,
           requestId
         }),
         TRANSLATE_TIMEOUT_MS,
@@ -449,15 +505,20 @@ function boot(): void {
       if (!response?.ok) throw new Error(response?.error || t("popupFailed", state.settings));
       const result = response.result as TranslateResult;
       if (!result?.translated?.trim()) throw new Error(t("errorMissing", state.settings));
-      if (shouldHideTranslation(result.sourceLang, result.targetLang, result.original, result.translated)) {
+      if (
+        !options.retain &&
+        shouldHideTranslation(result.sourceLang, result.targetLang, result.original, result.translated)
+      ) {
         hideUi();
         return;
       }
       if (requestId !== state.requestId || card.hidden) return;
+      delete card.dataset.busy;
       renderResult(result);
-      placeCard();
+      placeCard(true);
     } catch (error) {
       if (requestId !== state.requestId || card.hidden) return;
+      delete card.dataset.busy;
       const message = error instanceof Error ? error.message : t("popupFailed", state.settings);
       body.innerHTML = `
         <div class="block" data-no-speak="1">
@@ -469,9 +530,9 @@ function boot(): void {
   }
 
   function renderResult(result: TranslateResult): void {
-    if (result.targetLang) targetSelect.value = result.targetLang;
+    // Keep the user's target choice when they just changed the language dropdown.
     const locale = state.settings.uiLocale;
-    const targetLabel = languageBanner(result.targetLang);
+    const targetLabel = languageBanner(targetSelect.value || result.targetLang);
     const dictionary = (result.dictionary || [])
       .filter((item) => item.pos && item.terms?.length)
       .slice(0, 4);
@@ -552,6 +613,7 @@ function boot(): void {
   }
 
   function hideUi(): void {
+    if (isPickingLanguage()) return;
     state.requestId += 1;
     clearAutoTimer();
     window.clearTimeout(state.mouseUpTimer);
@@ -560,12 +622,14 @@ function boot(): void {
       window.cancelAnimationFrame(state.scrollRaf);
       state.scrollRaf = 0;
     }
+    delete card.dataset.busy;
     card.hidden = true;
   }
 
   function scheduleHide(): void {
     window.clearTimeout(state.hideTimer);
     state.hideTimer = window.setTimeout(() => {
+      if (isBubbleActive() || isPickingLanguage()) return;
       if (!selectedText()) hideUi();
     }, 200);
   }
@@ -648,6 +712,7 @@ function bubbleStyles(): string {
         box-shadow: var(--st-shadow);
         padding: 10px 12px 8px;
       }
+      .card[data-busy="1"] .target { opacity: 0.55; }
       .arrow {
         position: absolute;
         width: 14px;
