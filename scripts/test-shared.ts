@@ -12,10 +12,13 @@ import {
   rgbToHex,
   resolveTheme,
   sameLanguage,
+  sanitizeHttpUrl,
+  shouldHideTranslation,
   stripTags,
   ttsLang,
   unique
 } from "../src/shared.ts";
+import { resolveLlmConfig } from "../src/llm.ts";
 import { t } from "../src/i18n.ts";
 
 test("language helpers", () => {
@@ -34,6 +37,11 @@ test("language helpers", () => {
   assert.equal(sameLanguage("zh-TW", "zh_tw"), true);
   assert.equal(sameLanguage("auto", "zh-TW"), false);
   assert.equal(sameLanguage("en", "zh-TW"), false);
+  assert.equal(shouldHideTranslation("zh-TW", "zh-TW"), true);
+  assert.equal(shouldHideTranslation("en", "zh-TW", "hello", "hello"), true);
+  assert.equal(shouldHideTranslation("en", "zh-TW", "hello", "你好"), false);
+  assert.equal(sanitizeHttpUrl("https://api.example.com/v1/chat"), "https://api.example.com/v1/chat");
+  assert.equal(sanitizeHttpUrl("javascript:alert(1)"), "");
 });
 
 test("google parser", () => {
@@ -96,4 +104,24 @@ test("i18n", () => {
   assert.equal(t("extName", "zh-TW"), "選字翻譯");
   assert.equal(t("extName", "en"), "Select Translate");
   assert.equal(t("errorGoogle", "en", { STATUS: 429 }), "Google Translate is unavailable (429)");
+  assert.equal(t("extName", "auto"), "Select Translate");
+});
+
+test("llm config", () => {
+  const openai = resolveLlmConfig({
+    translator: "llm",
+    llmProvider: "openai",
+    llmEndpoint: "",
+    llmModel: ""
+  });
+  assert.equal(openai.endpoint, "https://api.openai.com/v1/chat/completions");
+  assert.equal(openai.model, "gpt-4o-mini");
+  const custom = resolveLlmConfig({
+    translator: "llm",
+    llmProvider: "openai",
+    llmEndpoint: "https://llm.example.com/v1/chat/completions",
+    llmModel: "local-model"
+  });
+  assert.equal(custom.endpoint, "https://llm.example.com/v1/chat/completions");
+  assert.equal(custom.model, "local-model");
 });

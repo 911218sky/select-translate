@@ -44,6 +44,7 @@ async function copyInto(dir) {
   for (const size of [16, 32, 48, 128]) {
     await cp(path.join(root, "icons", `icon${size}.png`), path.join(dir, "icons", `icon${size}.png`));
   }
+  await cp(path.join(root, "icons", "icon.svg"), path.join(dir, "icons", "icon.svg"));
   await cp(path.join(root, "_locales/zh_TW/messages.json"), path.join(dir, "_locales/zh_TW/messages.json"));
   await cp(path.join(root, "_locales/en/messages.json"), path.join(dir, "_locales/en/messages.json"));
   await cp(path.join(root, "examples"), path.join(dir, "examples"), { recursive: true });

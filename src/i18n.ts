@@ -18,9 +18,25 @@ export type MessageKey =
   | "customColor"
   | "uiLanguage"
   | "uiLanguageDesc"
-  | "uiLanguageAuto"
   | "uiLanguageZh"
   | "uiLanguageEn"
+  | "provider"
+  | "providerDesc"
+  | "providerGoogle"
+  | "providerLlm"
+  | "llmProvider"
+  | "llmProviderDesc"
+  | "llmEndpoint"
+  | "llmEndpointDesc"
+  | "llmModel"
+  | "llmModelDesc"
+  | "llmApiKey"
+  | "llmApiKeyDesc"
+  | "llmApiKeyPlaceholder"
+  | "errorLlmConfig"
+  | "errorLlmHttp"
+  | "errorLlmEmpty"
+  | "errorLlmPermission"
   | "translation"
   | "targetLang"
   | "targetLangDesc"
@@ -89,10 +105,26 @@ const ZH: Catalog = {
   accentDesc: "按鈕、選取狀態和氣泡重點會使用這個顏色。選 Chrome 主題時，會優先用瀏覽器主題色。",
   customColor: "自訂顏色",
   uiLanguage: "介面語言",
-  uiLanguageDesc: "設定頁、彈窗和氣泡的文字。選「跟隨瀏覽器」時，會依 Chrome 語言切換。",
-  uiLanguageAuto: "跟隨瀏覽器",
+  uiLanguageDesc: "設定頁、彈窗和氣泡只支援英文與繁體中文。預設為英文。",
   uiLanguageZh: "繁體中文",
   uiLanguageEn: "English",
+  provider: "翻譯來源",
+  providerDesc: "預設用 Google 翻譯。也可改成自己的 OpenAI、Claude 或 Gemini 相容節點。",
+  providerGoogle: "Google 翻譯",
+  providerLlm: "自訂 LLM",
+  llmProvider: "API 格式",
+  llmProviderDesc: "依節點實際支援的協定選擇。多數轉發服務可用 OpenAI。",
+  llmEndpoint: "API 節點",
+  llmEndpointDesc: "完整請求網址。留空則使用該格式的預設官方位址。",
+  llmModel: "模型",
+  llmModelDesc: "節點上的模型名稱。",
+  llmApiKey: "API 金鑰",
+  llmApiKeyDesc: "只存在這台電腦，不會同步到 Chrome 帳號。",
+  llmApiKeyPlaceholder: "選填，依節點需求",
+  errorLlmConfig: "請先在設定裡填寫 LLM 節點與金鑰",
+  errorLlmHttp: "LLM 節點回應失敗（$STATUS$）",
+  errorLlmEmpty: "LLM 沒有回傳譯文",
+  errorLlmPermission: "沒有權限連到這個 LLM 節點",
   translation: "翻譯",
   targetLang: "目標語言",
   targetLangDesc: "選取文字後預設翻成這個語言。",
@@ -109,7 +141,7 @@ const ZH: Catalog = {
   maxChars: "單次最多字數",
   maxCharsDesc: "超過這個長度會截斷後再翻譯。",
   howto: "使用方式",
-  howto1: "在網頁反白文字，翻譯氣泡會自動出現。來源語言和目標語言相同時不會跳出。",
+  howto1: "在網頁反白文字，翻譯氣泡會自動出現。來源語言和目標語言相同，或譯文與原文相同時不會跳出。",
   howto2: "可在氣泡裡改來源／目標語言，或點喇叭朗讀。",
   howto3: "也可以反白後按滑鼠右鍵，或用 Alt+T。",
   howto4: "工具列圖示可直接貼上文字翻譯。",
@@ -160,10 +192,26 @@ const EN: Catalog = {
   accentDesc: "Buttons and highlights use this color. Chrome theme mode prefers the browser theme color.",
   customColor: "Custom color",
   uiLanguage: "Interface language",
-  uiLanguageDesc: "Text in settings, the popup, and the bubble. “Follow browser” uses Chrome’s language.",
-  uiLanguageAuto: "Follow browser",
+  uiLanguageDesc: "Settings, popup, and bubble text. English and Traditional Chinese only. English is the default.",
   uiLanguageZh: "Traditional Chinese",
   uiLanguageEn: "English",
+  provider: "Translator",
+  providerDesc: "Use Google Translate by default, or your own OpenAI, Claude, or Gemini-compatible endpoint.",
+  providerGoogle: "Google Translate",
+  providerLlm: "Custom LLM",
+  llmProvider: "API format",
+  llmProviderDesc: "Choose the protocol your node speaks. Most proxies use OpenAI.",
+  llmEndpoint: "API endpoint",
+  llmEndpointDesc: "Full request URL. Leave blank to use the official default for this format.",
+  llmModel: "Model",
+  llmModelDesc: "Model name on the node.",
+  llmApiKey: "API key",
+  llmApiKeyDesc: "Stored on this computer only. It is not synced with your Chrome account.",
+  llmApiKeyPlaceholder: "Optional, if the node requires one",
+  errorLlmConfig: "Add an LLM endpoint and key in settings first",
+  errorLlmHttp: "The LLM endpoint failed ($STATUS$)",
+  errorLlmEmpty: "The LLM returned no translation",
+  errorLlmPermission: "This extension cannot reach that LLM endpoint",
   translation: "Translation",
   targetLang: "Target language",
   targetLangDesc: "Selected text is translated into this language by default.",
@@ -180,7 +228,7 @@ const EN: Catalog = {
   maxChars: "Character limit",
   maxCharsDesc: "Longer selections are trimmed before translating.",
   howto: "How to use",
-  howto1: "Select text on a page. The bubble appears automatically, unless the source and target languages match.",
+  howto1: "Select text on a page. The bubble appears automatically, unless the source already matches the target language.",
   howto2: "Change languages in the bubble, or tap a speaker to listen.",
   howto3: "You can also right-click the selection or press Alt+T.",
   howto4: "Use the toolbar icon to paste text and translate it.",
@@ -219,15 +267,9 @@ const CATALOGS: Record<"zh-TW" | "en", Catalog> = {
   en: EN
 };
 
-export function browserUiLocale(): "zh-TW" | "en" {
-  const lang = (globalThis.chrome?.i18n?.getUILanguage?.() || globalThis.navigator?.language || "en").toLowerCase();
-  return lang.startsWith("zh") ? "zh-TW" : "en";
-}
-
 export function resolveUiLocale(settings?: Pick<Settings, "uiLocale"> | UiLocale | string): "zh-TW" | "en" {
   const value = typeof settings === "string" ? settings : settings?.uiLocale;
-  if (value === "zh-TW" || value === "en") return value;
-  return browserUiLocale();
+  return value === "zh-TW" ? "zh-TW" : "en";
 }
 
 export function t(

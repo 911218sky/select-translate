@@ -6,7 +6,7 @@ import {
   googleTranslateUrl,
   languageBanner,
   languageOptionsHtml,
-  sameLanguage
+  shouldHideTranslation
 } from "./shared.ts";
 import { t } from "./i18n.ts";
 import { watch } from "./theme.ts";
@@ -23,7 +23,8 @@ function boot(): void {
     lastText: "",
     lastRangeRect: null as DOMRect | null,
     hideTimer: 0,
-    requestId: 0
+    requestId: 0,
+    pointer: { x: 0, y: 0, selection: "" }
   };
 
   const host = document.createElement("div");
@@ -167,7 +168,22 @@ function boot(): void {
   function onMouseUp(event: MouseEvent): void {
     if (event.button !== 0) return;
     if (isInUi(event)) return;
-    window.setTimeout(() => handleSelection(event), 10);
+    const dx = event.clientX - state.pointer.x;
+    const dy = event.clientY - state.pointer.y;
+    const moved = dx * dx + dy * dy > 36;
+    if (isInteractive(event.target)) {
+      hideUi();
+      return;
+    }
+    window.setTimeout(() => {
+      const next = selectedText();
+      if (!next) {
+        hideUi();
+        return;
+      }
+      if (!moved && next === state.pointer.selection) return;
+      handleSelection(event);
+    }, 10);
   }
 
   function onKeyUp(event: KeyboardEvent): void {
@@ -179,6 +195,11 @@ function boot(): void {
 
   function onMouseDown(event: MouseEvent): void {
     if (isInUi(event)) return;
+    state.pointer = {
+      x: event.clientX,
+      y: event.clientY,
+      selection: selectedText()
+    };
     hideUi();
   }
 
@@ -196,7 +217,7 @@ function boot(): void {
     if (state.settings.skipInputs && isEditable(document.activeElement)) return;
     captureSelection();
     state.lastText = text;
-    if (sameLanguage(sourceSelect.value, targetSelect.value)) {
+    if (shouldHideTranslation(sourceSelect.value, targetSelect.value)) {
       hideUi();
       return;
     }
@@ -216,6 +237,11 @@ function boot(): void {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
     state.lastRangeRect = selection.getRangeAt(0).getBoundingClientRect();
+  }
+
+  function isInteractive(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest("button, a, input, textarea, select, summary, [role='button'], [role='link'], [role='menuitem']"));
   }
 
   function isEditable(el: Element | null): boolean {
@@ -240,7 +266,7 @@ function boot(): void {
   async function translateNow(text: string): Promise<void> {
     const query = String(text || "").trim();
     if (!query) return;
-    if (sameLanguage(sourceSelect.value, targetSelect.value)) {
+    if (shouldHideTranslation(sourceSelect.value, targetSelect.value)) {
       hideUi();
       return;
     }
@@ -262,7 +288,7 @@ function boot(): void {
       if (requestId !== state.requestId) return;
       if (!response?.ok) throw new Error(response?.error || t("popupFailed", state.settings));
       const result = response.result as TranslateResult;
-      if (sameLanguage(result.sourceLang, result.targetLang)) {
+      if (shouldHideTranslation(result.sourceLang, result.targetLang, result.original, result.translated)) {
         hideUi();
         return;
       }

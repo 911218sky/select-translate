@@ -12,10 +12,11 @@
 
 - 選取後自動翻譯，或先顯示翻譯按鈕
 - 氣泡可改來源語言與目標語言
-- 來源語言和目標語言相同時不彈窗
+- 來源語言和目標語言相同，或譯文與原文相同時不彈窗
 - 喇叭使用 Google 翻譯的語音（`translate.google.com/translate_tts`）
+- 可改接自己的 OpenAI、Claude 或 Gemini 相容 LLM 節點
 - 淺色、深色、跟隨系統、跟隨 Chrome 主題，也可自訂強調色
-- 介面支援繁體中文與英文
+- 介面只有英文與繁體中文，預設英文
 - 工具列彈窗、右鍵選單、`Alt+T`
 
 翻譯來源是 Google 的公開 `translate.googleapis.com` 端點。這個 API 沒有官方保證，失敗時會改走 MyMemory。單字通常會帶詞性；長句通常只有譯文。
@@ -76,4 +77,4 @@ npm run pack
 
 ## 授權
 
-[MIT](LICENSE) © 2026 Chiu Chun-Hsien
+[MIT](LICENSE)

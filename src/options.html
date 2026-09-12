@@ -1,17 +1,17 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>選字翻譯設定</title>
+    <title>Select Translate settings</title>
     <link rel="stylesheet" href="ui.css" />
   </head>
   <body class="options">
     <header class="topbar">
       <img src="../icons/icon32.png" alt="" />
       <div>
-        <p class="eyebrow" data-i18n="extName">選字翻譯</p>
-        <h1 data-i18n="optionsHeading">設定</h1>
+        <p class="eyebrow" data-i18n="extName">Select Translate</p>
+        <h1 data-i18n="optionsHeading">Settings</h1>
       </div>
     </header>
     <main>
@@ -24,9 +24,8 @@
             <span class="setting-desc" data-i18n="uiLanguageDesc">設定頁、彈窗和氣泡的文字。</span>
           </span>
           <select id="uiLocale" name="uiLocale">
-            <option value="auto">跟隨瀏覽器</option>
-            <option value="zh-TW">繁體中文</option>
             <option value="en">English</option>
+            <option value="zh-TW">繁體中文</option>
           </select>
         </label>
         <div class="setting">
@@ -61,7 +60,51 @@
         </div>
       </section>
       <section class="card">
-        <h2 data-i18n="translation">翻譯</h2>
+        <h2 data-i18n="translation">Translation</h2>
+        <label class="setting stack">
+          <span>
+            <span class="setting-title" data-i18n="provider">Translator</span>
+            <span class="setting-desc" data-i18n="providerDesc">Use Google Translate by default, or your own OpenAI, Claude, or Gemini-compatible endpoint.</span>
+          </span>
+          <select id="translator" name="translator">
+            <option value="google">Google Translate</option>
+            <option value="llm">Custom LLM</option>
+          </select>
+        </label>
+        <div id="llmSettings">
+          <label class="setting stack">
+            <span>
+              <span class="setting-title" data-i18n="llmProvider">API format</span>
+              <span class="setting-desc" data-i18n="llmProviderDesc">Choose the protocol your node speaks. Most proxies use OpenAI.</span>
+            </span>
+            <select id="llmProvider" name="llmProvider">
+              <option value="openai">OpenAI</option>
+              <option value="claude">Claude</option>
+              <option value="gemini">Gemini</option>
+            </select>
+          </label>
+          <label class="setting stack">
+            <span>
+              <span class="setting-title" data-i18n="llmEndpoint">API endpoint</span>
+              <span class="setting-desc" data-i18n="llmEndpointDesc">Full request URL. Leave blank to use the official default for this format.</span>
+            </span>
+            <input id="llmEndpoint" name="llmEndpoint" type="url" spellcheck="false" />
+          </label>
+          <label class="setting stack">
+            <span>
+              <span class="setting-title" data-i18n="llmModel">Model</span>
+              <span class="setting-desc" data-i18n="llmModelDesc">Model name on the node.</span>
+            </span>
+            <input id="llmModel" name="llmModel" type="text" spellcheck="false" />
+          </label>
+          <label class="setting stack">
+            <span>
+              <span class="setting-title" data-i18n="llmApiKey">API key</span>
+              <span class="setting-desc" data-i18n="llmApiKeyDesc">Stored on this computer only. It is not synced with your Chrome account.</span>
+            </span>
+            <input id="llmApiKey" name="llmApiKey" type="password" autocomplete="off" spellcheck="false" />
+          </label>
+        </div>
         <label class="setting stack">
           <span>
             <span class="setting-title" data-i18n="targetLang">目標語言</span>

@@ -54,7 +54,29 @@ export const DEFAULTS: Settings = {
   maxChars: 5000,
   appearance: "system",
   accentColor: "#1a73e8",
-  uiLocale: "auto"
+  uiLocale: "en",
+  translator: "google",
+  llmProvider: "openai",
+  llmEndpoint: "",
+  llmModel: ""
+};
+
+export const LLM_DEFAULTS: Record<
+  "openai" | "claude" | "gemini",
+  { endpoint: string; model: string }
+> = {
+  openai: {
+    endpoint: "https://api.openai.com/v1/chat/completions",
+    model: "gpt-4o-mini"
+  },
+  claude: {
+    endpoint: "https://api.anthropic.com/v1/messages",
+    model: "claude-3-5-haiku-latest"
+  },
+  gemini: {
+    endpoint: "https://generativelanguage.googleapis.com/v1beta",
+    model: "gemini-2.0-flash"
+  }
 };
 
 export const ACCENT_PRESETS = [
@@ -202,6 +224,29 @@ export function sameLanguage(source: string | undefined, target: string | undefi
   if (!tl || tl === "auto") return false;
   if (!sl || sl === "auto") return false;
   return sl.toLowerCase() === tl.toLowerCase();
+}
+
+export function compactText(value: unknown): string {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+export function isNoOpTranslation(original: unknown, translated: unknown): boolean {
+  const source = compactText(original);
+  const target = compactText(translated);
+  return Boolean(source) && source === target;
+}
+
+export function shouldHideTranslation(
+  sourceLang: string | undefined,
+  targetLang: string | undefined,
+  original?: unknown,
+  translated?: unknown
+): boolean {
+  if (sameLanguage(sourceLang, targetLang)) return true;
+  if (original !== undefined && translated !== undefined && isNoOpTranslation(original, translated)) {
+    return true;
+  }
+  return false;
 }
 
 export function stripTags(html: unknown): string {
@@ -484,4 +529,25 @@ export function googleTranslateUrl(text: string, sl: string, tl: string): string
 
 export function toStorage(value: Partial<Settings> | Settings): { [key: string]: unknown } {
   return { ...(value as unknown as { [key: string]: unknown }) };
+}
+
+export function llmDefaults(provider: Settings["llmProvider"]): { endpoint: string; model: string } {
+  return LLM_DEFAULTS[provider] || LLM_DEFAULTS.openai;
+}
+
+export function sanitizeHttpUrl(value: string): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+export function originPattern(url: string): string {
+  const parsed = new URL(url);
+  return `${parsed.origin}/*`;
 }

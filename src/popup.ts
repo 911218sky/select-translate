@@ -13,7 +13,7 @@ let uiLocale = DEFAULTS.uiLocale;
 
 void chrome.storage.sync.get(toStorage(DEFAULTS)).then((stored) => {
   const settings = { ...DEFAULTS, ...(stored as unknown as Partial<Settings>) };
-  uiLocale = settings.uiLocale || "auto";
+  uiLocale = settings.uiLocale === "zh-TW" ? "zh-TW" : "en";
   applyDomI18n(document, settings);
   document.documentElement.lang = uiLocale === "en" ? "en" : "zh-Hant";
   document.title = t("extName", settings);

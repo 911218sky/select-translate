@@ -104,8 +104,13 @@ h2 {
 }
 
 .card > h2 + .section-desc + .setting,
-.card > h2 + .setting {
+.card > h2 + .setting,
+#llmSettings .setting:first-child {
   border-top: 0;
+}
+
+#llmSettings[hidden] {
+  display: none;
 }
 
 .setting.stack {
@@ -188,6 +193,9 @@ h2 {
 
 select,
 input[type="number"],
+input[type="url"],
+input[type="text"],
+input[type="password"],
 textarea {
   width: 100%;
   border: 1px solid var(--st-border);

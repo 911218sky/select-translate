@@ -14,10 +14,11 @@ Select a word or sentence on any page. The bubble shows the original text, trans
 
 - Translate as soon as you select text, or show a button first
 - Choose source and target languages in the bubble
-- Skip the bubble when the detected source language already matches the target
+- Skip the bubble when the source and target languages match, or the text is already in the target language
 - Speak with Google Translate’s voice (`translate.google.com/translate_tts`)
+- Optional OpenAI, Claude, or Gemini-compatible LLM endpoint
 - Light, dark, system, or Chrome theme colors, plus a custom accent
-- English and Traditional Chinese UI
+- English and Traditional Chinese UI (English by default)
 - Toolbar popup, right-click menu, and `Alt+T`
 
 Translation uses Google’s public `translate.googleapis.com` endpoint. That API is unofficial, so the extension falls back to MyMemory if Google is unavailable. Single words usually include dictionary rows; longer sentences usually return only the translation.
@@ -78,4 +79,4 @@ Source is TypeScript under `src/`. `esbuild` bundles each entry into an IIFE tha
 
 ## License
 
-[MIT](LICENSE) © 2026 Chiu Chun-Hsien
+[MIT](LICENSE)

@@ -1,6 +1,8 @@
 export type Appearance = "light" | "dark" | "system" | "chrome";
 export type TriggerMode = "auto" | "button";
-export type UiLocale = "auto" | "zh-TW" | "en";
+export type UiLocale = "zh-TW" | "en";
+export type Translator = "google" | "llm";
+export type LlmProvider = "openai" | "claude" | "gemini";
 export type ColorScheme = "light" | "dark";
 export interface Language {
   code: string;
@@ -18,6 +20,10 @@ export interface Settings {
   appearance: Appearance;
   accentColor: string;
   uiLocale: UiLocale;
+  translator: Translator;
+  llmProvider: LlmProvider;
+  llmEndpoint: string;
+  llmModel: string;
 }
 
 export interface DictionaryEntry {
@@ -51,7 +57,7 @@ export interface TranslateResult {
   definitions: DefinitionGroup[];
   examples: string[];
   alternatives: string[];
-  provider: "google" | "mymemory";
+  provider: "google" | "mymemory" | "openai" | "claude" | "gemini";
   warning?: string;
 }
 
@@ -106,11 +112,26 @@ export interface TranslateSelectionMessage {
   text?: string;
 }
 
+export interface GetSecretsMessage {
+  type: "GET_SECRETS";
+}
+
+export interface SaveSecretsMessage {
+  type: "SAVE_SECRETS";
+  llmApiKey?: string;
+}
+
+export interface Secrets {
+  llmApiKey: string;
+}
+
 export type ExtensionMessage =
   | TranslateMessage
   | SpeakMessage
   | OffscreenSpeakMessage
   | TranslateSelectionMessage
+  | GetSecretsMessage
+  | SaveSecretsMessage
   | { type: "GET_SETTINGS" }
   | { type: "OPEN_OPTIONS" }
   | { type: "PING" }
@@ -120,6 +141,7 @@ export interface OkResponse<T = unknown> {
   ok: true;
   result?: T;
   settings?: Settings;
+  secrets?: Secrets;
   theme?: ChromeThemeLike | null;
   tabId?: number | null;
 }

@@ -1,27 +1,41 @@
-import type { ExtensionMessage, MessageResponse, Settings, TranslateResult } from "./types.ts";
+import type { ExtensionMessage, MessageResponse, Secrets, Settings, TranslateResult } from "./types.ts";
 import { DEFAULTS, GOOGLE_TTS_LIMIT, googleTtsUrl, normalizeLang, parseGoogleResult, toStorage, ttsLang } from "./shared.ts";
+import { llmOrigin, resolveLlmConfig, translateWithLlm } from "./llm.ts";
 import { t } from "./i18n.ts";
 
 const MENU_ID = "select-translate-selection";
 const OFFSCREEN_PATH = "src/offscreen.html";
 let creatingOffscreen: Promise<void> | null = null;
+let menuQueue: Promise<void> = Promise.resolve();
 
 async function readSettings(): Promise<Settings> {
   return { ...DEFAULTS, ...((await chrome.storage.sync.get(toStorage(DEFAULTS))) as unknown as Partial<Settings>) };
 }
 
-chrome.runtime.onInstalled.addListener(async (details) => {
-  const current = await readSettings();
-  const next: Settings = { ...DEFAULTS, ...current };
-  if (details.reason === "install" || details.previousVersion === "1.0.0") {
-    next.trigger = "auto";
-  }
-  await chrome.storage.sync.set(toStorage(next));
-  await createContextMenu();
+async function readSecrets(): Promise<Secrets> {
+  const stored = (await chrome.storage.local.get(["llmApiKey"])) as { llmApiKey?: string };
+  return { llmApiKey: String(stored.llmApiKey || "") };
+}
+
+function queueContextMenu(): void {
+  menuQueue = menuQueue.then(createContextMenu, createContextMenu);
+}
+
+chrome.runtime.onInstalled.addListener((details) => {
+  void (async () => {
+    const current = await readSettings();
+    const next: Settings = { ...DEFAULTS, ...current };
+    if (details.reason === "install" || details.previousVersion === "1.0.0") {
+      next.trigger = "auto";
+    }
+    if (current.uiLocale !== "en" && current.uiLocale !== "zh-TW") next.uiLocale = "en";
+    await chrome.storage.sync.set(toStorage(next));
+    queueContextMenu();
+  })();
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  void createContextMenu();
+  queueContextMenu();
 });
 
 if (chrome.theme?.onChanged) {
@@ -31,16 +45,24 @@ if (chrome.theme?.onChanged) {
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "sync" && changes.uiLocale) void createContextMenu();
+  if (area === "sync" && changes.uiLocale) queueContextMenu();
 });
 
 async function createContextMenu(): Promise<void> {
   const settings = await readSettings();
   await chrome.contextMenus.removeAll();
-  chrome.contextMenus.create({
-    id: MENU_ID,
-    title: t("contextMenu", settings),
-    contexts: ["selection"]
+  await new Promise<void>((resolve) => {
+    chrome.contextMenus.create(
+      {
+        id: MENU_ID,
+        title: t("contextMenu", settings),
+        contexts: ["selection"]
+      },
+      () => {
+        void chrome.runtime.lastError;
+        resolve();
+      }
+    );
   });
 }
 
@@ -98,6 +120,13 @@ async function handleMessage(message: ExtensionMessage, sender: chrome.runtime.M
       return { ok: true, theme: null };
     }
   }
+  if (message?.type === "GET_SECRETS") {
+    return { ok: true, secrets: await readSecrets() };
+  }
+  if (message?.type === "SAVE_SECRETS") {
+    await chrome.storage.local.set({ llmApiKey: String(message.llmApiKey || "") });
+    return { ok: true, secrets: await readSecrets() };
+  }
   throw new Error(t("errorUnknown", settings));
 }
 
@@ -126,6 +155,13 @@ async function translateText(
   const tl = normalizeLang(targetLang || settings.targetLang);
   const limited = text.slice(0, settings.maxChars || 5000);
 
+  if (settings.translator === "llm") {
+    const secrets = await readSecrets();
+    const { endpoint } = resolveLlmConfig(settings);
+    await ensureHostAccess(endpoint, settings);
+    return translateWithLlm(limited, sl, tl, settings, secrets.llmApiKey);
+  }
+
   try {
     return await translateWithGoogle(limited, sl, tl);
   } catch (googleError) {
@@ -133,6 +169,12 @@ async function translateText(
     fallback.warning = googleError instanceof Error ? googleError.message : t("warningFallback", settings);
     return fallback;
   }
+}
+
+async function ensureHostAccess(endpoint: string, settings: Settings): Promise<void> {
+  const origin = llmOrigin(endpoint);
+  const has = await chrome.permissions.contains({ origins: [origin] });
+  if (!has) throw new Error(t("errorLlmPermission", settings));
 }
 
 async function translateWithGoogle(text: string, sl: string, tl: string): Promise<TranslateResult> {
