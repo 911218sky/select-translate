@@ -1,7 +1,7 @@
-import type { Appearance, LlmProvider, Settings, Translator } from "./types.ts";
-import { ACCENT_PRESETS, DEFAULTS, languageOptionsHtml, llmDefaults, normalizeHex, sanitizeHttpUrl, toStorage } from "./shared.ts";
-import { applyDomI18n, t } from "./i18n.ts";
-import { apply as applyTheme, watch } from "./theme.ts";
+import type { Appearance, LlmProvider, Settings, Translator } from "../lib/types.ts";
+import { ACCENT_PRESETS, DEFAULTS, languageOptionsHtml, llmDefaults, normalizeHex, sanitizeHttpUrl, toStorage } from "../lib/shared.ts";
+import { applyDomI18n, t } from "../lib/i18n.ts";
+import { apply as applyTheme, watch } from "../lib/theme.ts";
 
 const sourceLang = must(document.getElementById("sourceLang") as HTMLSelectElement | null);
 const targetLang = must(document.getElementById("targetLang") as HTMLSelectElement | null);

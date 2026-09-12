@@ -6,15 +6,22 @@ import { spawnSync } from "node:child_process";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(root, "dist");
-const entries = ["background", "content", "popup", "options", "offscreen"];
+
+const entries = [
+  { name: "background", dir: "background" },
+  { name: "content", dir: "content" },
+  { name: "popup", dir: "popup" },
+  { name: "options", dir: "options" },
+  { name: "offscreen", dir: "offscreen" }
+];
 
 async function bundle() {
   await Promise.all(
-    entries.map((name) =>
+    entries.map(({ dir }) =>
       build({
         absWorkingDir: root,
-        entryPoints: [`src/${name}.ts`],
-        outfile: `src/${name}.js`,
+        entryPoints: [`src/${dir}/index.ts`],
+        outfile: `src/${dir}/index.js`,
         bundle: true,
         format: "iife",
         platform: "browser",
@@ -35,12 +42,20 @@ async function copyInto(dir) {
   await cp(path.join(root, "LICENSE"), path.join(dir, "LICENSE"));
   await cp(path.join(root, "README.md"), path.join(dir, "README.md"));
   await cp(path.join(root, "README.zh-TW.md"), path.join(dir, "README.zh-TW.md"));
-  for (const name of entries) {
-    await cp(path.join(root, "src", `${name}.js`), path.join(dir, "src", `${name}.js`));
+
+  for (const { dir: entryDir } of entries) {
+    const destDir = path.join(dir, "src", entryDir);
+    await mkdir(destDir, { recursive: true });
+    await cp(path.join(root, "src", entryDir, "index.js"), path.join(destDir, "index.js"));
   }
-  for (const file of ["popup.html", "options.html", "offscreen.html", "ui.css"]) {
-    await cp(path.join(root, "src", file), path.join(dir, "src", file));
+
+  for (const page of ["popup", "options", "offscreen"]) {
+    await cp(path.join(root, "src", page, "index.html"), path.join(dir, "src", page, "index.html"));
   }
+
+  await mkdir(path.join(dir, "src/styles"), { recursive: true });
+  await cp(path.join(root, "src/styles/ui.css"), path.join(dir, "src/styles/ui.css"));
+
   for (const size of [16, 32, 48, 128]) {
     await cp(path.join(root, "icons", `icon${size}.png`), path.join(dir, "icons", `icon${size}.png`));
   }

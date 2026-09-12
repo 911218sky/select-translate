@@ -1,5 +1,5 @@
-import type { OffscreenSpeakMessage } from "./types.ts";
-import { ttsLang } from "./shared.ts";
+import type { OffscreenSpeakMessage } from "../lib/types.ts";
+import { ttsLang } from "../lib/shared.ts";
 
 let currentAudio: HTMLAudioElement | null = null;
 

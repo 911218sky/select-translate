@@ -1,7 +1,7 @@
-import type { Settings, TranslateResult } from "./types.ts";
-import { DEFAULTS, escapeHtml, languageName, languageOptionsHtml, toStorage } from "./shared.ts";
-import { applyDomI18n, t } from "./i18n.ts";
-import { watch } from "./theme.ts";
+import type { Settings, TranslateResult } from "../lib/types.ts";
+import { DEFAULTS, escapeHtml, languageName, languageOptionsHtml, toStorage } from "../lib/shared.ts";
+import { applyDomI18n, t } from "../lib/i18n.ts";
+import { watch } from "../lib/theme.ts";
 
 const sourceText = must(document.getElementById("sourceText") as HTMLTextAreaElement | null);
 const sourceLang = must(document.getElementById("sourceLang") as HTMLSelectElement | null);
