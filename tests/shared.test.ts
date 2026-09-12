@@ -18,7 +18,7 @@ import {
   ttsLang,
   unique
 } from "../src/lib/shared.ts";
-import { resolveLlmConfig } from "../src/lib/llm.ts";
+import { chatCompletionsUrl, modelsListUrl, resolveLlmConfig } from "../src/lib/llm.ts";
 import { t } from "../src/lib/i18n.ts";
 
 test("language helpers", () => {
@@ -124,4 +124,33 @@ test("llm config", () => {
   });
   assert.equal(custom.endpoint, "https://llm.example.com/v1/chat/completions");
   assert.equal(custom.model, "local-model");
+  assert.equal(
+    modelsListUrl("openai", "https://llm.example.com/v1/chat/completions"),
+    "https://llm.example.com/v1/models"
+  );
+  assert.equal(modelsListUrl("claude", "https://api.anthropic.com/v1/messages"), "https://api.anthropic.com/v1/models");
+  assert.equal(
+    modelsListUrl("gemini", "https://generativelanguage.googleapis.com/v1beta"),
+    "https://generativelanguage.googleapis.com/v1beta/models"
+  );
+  assert.equal(
+    chatCompletionsUrl("openai", "https://llm.example.com/v1"),
+    "https://llm.example.com/v1/chat/completions"
+  );
+  assert.equal(
+    chatCompletionsUrl("openai", "https://llm.example.com/v1/chat/completions"),
+    "https://llm.example.com/v1/chat/completions"
+  );
+  assert.equal(
+    chatCompletionsUrl("claude", "https://api.anthropic.com/v1"),
+    "https://api.anthropic.com/v1/messages"
+  );
+  assert.equal(
+    modelsListUrl("gemini", "https://generativelanguage.googleapis.com/v1beta/models"),
+    "https://generativelanguage.googleapis.com/v1beta/models"
+  );
+  assert.equal(
+    modelsListUrl("openai", "https://llm.example.com/v1/chat/completions?api-version=2024-01-01"),
+    "https://llm.example.com/v1/models?api-version=2024-01-01"
+  );
 });

@@ -14,6 +14,66 @@ export function llmOrigin(endpoint: string): string {
   return originPattern(endpoint);
 }
 
+/** Normalize a base or chat URL into the provider chat/completions request URL. */
+export function chatCompletionsUrl(provider: LlmProvider, endpoint: string): string {
+  if (provider === "gemini") return endpoint;
+  const url = new URL(endpoint);
+  let path = url.pathname.replace(/\/+$/, "");
+  if (provider === "claude") {
+    if (!/\/messages$/i.test(path)) {
+      path = path.replace(/\/(chat\/completions|models)$/i, "");
+      path = `${path || "/v1"}/messages`;
+    }
+  } else if (!/\/chat\/completions$/i.test(path)) {
+    path = path.replace(/\/(messages|models)$/i, "");
+    path = `${path || "/v1"}/chat/completions`;
+  }
+  url.pathname = path;
+  return url.toString();
+}
+
+/** Derive the provider models-list URL from a chat/completions-style endpoint. */
+export function modelsListUrl(provider: LlmProvider, endpoint: string): string {
+  const url = new URL(endpoint);
+  if (provider === "gemini") {
+    const base = url.pathname
+      .replace(/\/+$/, "")
+      .replace(/\/models\/[^/]+(?::[\w]+)?$/, "")
+      .replace(/\/models$/i, "");
+    url.pathname = `${base || "/v1beta"}/models`;
+    return url.toString();
+  }
+  let path = url.pathname.replace(/\/+$/, "");
+  path = path
+    .replace(/\/chat\/completions$/i, "")
+    .replace(/\/messages$/i, "")
+    .replace(/\/models$/i, "");
+  url.pathname = `${path || "/v1"}/models`;
+  return url.toString();
+}
+
+export async function listLlmModels(settings: Settings, apiKey: string): Promise<string[]> {
+  const { provider, endpoint } = resolveLlmConfig(settings);
+  if (!endpoint) throw new Error(t("errorLlmConfig", settings));
+  const listUrl = modelsListUrl(provider, endpoint);
+  if (provider === "claude") {
+    return listClaudeModels(listUrl, apiKey, settings);
+  }
+  if (provider === "gemini") {
+    return listGeminiModels(listUrl, apiKey, settings);
+  }
+  return listOpenAiModels(listUrl, apiKey, settings);
+}
+
+export async function testLlmConnection(
+  settings: Settings,
+  apiKey: string
+): Promise<{ translated: string; provider: string }> {
+  const sample = "Hello";
+  const result = await translateWithLlm(sample, "en", settings.targetLang || "zh-TW", settings, apiKey);
+  return { translated: result.translated, provider: result.provider };
+}
+
 export async function translateWithLlm(
   text: string,
   sl: string,
@@ -23,13 +83,14 @@ export async function translateWithLlm(
 ): Promise<TranslateResult> {
   const { provider, endpoint, model } = resolveLlmConfig(settings);
   if (!endpoint) throw new Error(t("errorLlmConfig", settings));
+  const chatUrl = chatCompletionsUrl(provider, endpoint);
   const prompt = translationPrompt(text, sl, tl);
   const translated =
     provider === "claude"
-      ? await translateClaude(endpoint, model, apiKey, prompt, settings)
+      ? await translateClaude(chatUrl, model, apiKey, prompt, settings)
       : provider === "gemini"
         ? await translateGemini(endpoint, model, apiKey, prompt, settings)
-        : await translateOpenAi(endpoint, model, apiKey, prompt, settings);
+        : await translateOpenAi(chatUrl, model, apiKey, prompt, settings);
   if (!translated) throw new Error(t("errorLlmEmpty", settings));
   return {
     original: text,
@@ -136,14 +197,59 @@ async function translateGemini(
 
 function geminiUrl(endpoint: string, model: string, apiKey: string): URL {
   const url = new URL(endpoint);
+  const modelId = String(model || "")
+    .trim()
+    .replace(/^models\//i, "");
   if (!/:(generateContent|streamGenerateContent)$/.test(url.pathname)) {
-    const base = url.pathname.replace(/\/+$/, "");
-    url.pathname = `${base}/models/${encodeURIComponent(model)}:generateContent`;
+    const base = url.pathname
+      .replace(/\/+$/, "")
+      .replace(/\/models\/[^/]+(?::[\w]+)?$/, "")
+      .replace(/\/models$/i, "");
+    url.pathname = `${base || "/v1beta"}/models/${encodeURIComponent(modelId)}:generateContent`;
   }
   if (apiKey && !url.searchParams.has("key") && url.hostname.endsWith("googleapis.com")) {
     url.searchParams.set("key", apiKey);
   }
   return url;
+}
+
+async function listOpenAiModels(url: string, apiKey: string, settings: Settings): Promise<string[]> {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  const data = await getJson(url, headers, settings);
+  const rows = Array.isArray((data as { data?: unknown[] }).data) ? (data as { data: Array<{ id?: unknown }> }).data : [];
+  return uniqueIds(rows.map((row) => String(row?.id || "").trim()));
+}
+
+async function listClaudeModels(url: string, apiKey: string, settings: Settings): Promise<string[]> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "anthropic-version": "2023-06-01"
+  };
+  if (apiKey) headers["x-api-key"] = apiKey;
+  const data = await getJson(url, headers, settings);
+  const rows = Array.isArray((data as { data?: unknown[] }).data) ? (data as { data: Array<{ id?: unknown }> }).data : [];
+  return uniqueIds(rows.map((row) => String(row?.id || "").trim()));
+}
+
+async function listGeminiModels(url: string, apiKey: string, settings: Settings): Promise<string[]> {
+  const parsed = new URL(url);
+  if (apiKey && !parsed.searchParams.has("key") && parsed.hostname.endsWith("googleapis.com")) {
+    parsed.searchParams.set("key", apiKey);
+  }
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (apiKey && !parsed.searchParams.has("key")) headers.Authorization = `Bearer ${apiKey}`;
+  const data = await getJson(parsed.toString(), headers, settings);
+  const rows = Array.isArray((data as { models?: unknown[] }).models)
+    ? (data as { models: Array<{ name?: unknown }> }).models
+    : [];
+  return uniqueIds(
+    rows.map((row) =>
+      String(row?.name || "")
+        .replace(/^models\//, "")
+        .trim()
+    )
+  );
 }
 
 async function postJson(
@@ -162,10 +268,35 @@ async function postJson(
   } catch {
     throw new Error(t("errorLlmPermission", settings));
   }
+  return readJson(response, settings);
+}
+
+async function getJson(url: string, headers: Record<string, string>, settings: Settings): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetch(url, { method: "GET", headers });
+  } catch {
+    throw new Error(t("errorLlmPermission", settings));
+  }
+  return readJson(response, settings);
+}
+
+async function readJson(response: Response, settings: Settings): Promise<unknown> {
+  const raw = await response.text();
   if (!response.ok) {
     throw new Error(t("errorLlmHttp", settings, { STATUS: String(response.status) }));
   }
-  return response.json();
+  const trimmed = raw.trim();
+  if (!trimmed) throw new Error(t("errorLlmEmpty", settings));
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    throw new Error(t("errorLlmNotJson", settings));
+  }
+}
+
+function uniqueIds(ids: string[]): string[] {
+  return [...new Set(ids.filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
 
 function extractText(value: unknown): string {
