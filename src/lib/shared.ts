@@ -243,6 +243,49 @@ export function isNoOpTranslation(original: unknown, translated: unknown): boole
   return Boolean(source) && source === target;
 }
 
+function countMatches(text: string, pattern: RegExp): number {
+  return (text.match(pattern) || []).length;
+}
+
+/**
+ * Cheap script heuristic so we can skip the bubble before calling translate
+ * when source is "auto" and the selection already looks like the target language
+ * (e.g. target zh-TW + selected Chinese text).
+ */
+export function textLooksLikeLanguage(text: string, lang: string | undefined): boolean {
+  const tl = normalizeLang(lang);
+  if (!tl || tl === "auto") return false;
+  const sample = compactText(text);
+  if (!sample) return false;
+
+  const han = countMatches(sample, /\p{Script=Han}/gu);
+  const hiragana = countMatches(sample, /\p{Script=Hiragana}/gu);
+  const katakana = countMatches(sample, /\p{Script=Katakana}/gu);
+  const hangul = countMatches(sample, /\p{Script=Hangul}/gu);
+  const latin = countMatches(sample, /\p{Script=Latin}/gu);
+  const cyrillic = countMatches(sample, /\p{Script=Cyrillic}/gu);
+  const arabic = countMatches(sample, /\p{Script=Arabic}/gu);
+  const thai = countMatches(sample, /\p{Script=Thai}/gu);
+  const total = han + hiragana + katakana + hangul + latin + cyrillic + arabic + thai;
+  if (total === 0) return false;
+  const share = (n: number) => n / total;
+  const cjkOther = hiragana + katakana + hangul;
+
+  if (tl === "zh-TW" || tl === "zh-CN") {
+    return share(han) >= 0.5 && share(cjkOther) < 0.12;
+  }
+  if (tl === "ja") {
+    return share(hiragana + katakana) >= 0.12 || (share(han) >= 0.35 && share(hiragana + katakana) >= 0.05);
+  }
+  if (tl === "ko") return share(hangul) >= 0.45;
+  if (tl === "ru" || tl === "uk") return share(cyrillic) >= 0.5;
+  if (tl === "ar") return share(arabic) >= 0.5;
+  if (tl === "th") return share(thai) >= 0.5;
+  if (tl === "he") return countMatches(sample, /\p{Script=Hebrew}/gu) / Math.max(total, 1) >= 0.5;
+  // Latin-script targets (en, es, fr, …)
+  return share(latin) >= 0.55 && share(han + cjkOther) < 0.2;
+}
+
 export function shouldHideTranslation(
   sourceLang: string | undefined,
   targetLang: string | undefined,
@@ -252,6 +295,13 @@ export function shouldHideTranslation(
   if (sameLanguage(sourceLang, targetLang)) return true;
   if (original !== undefined && translated !== undefined && isNoOpTranslation(original, translated)) {
     return true;
+  }
+  // Before translate (no translated yet): if source is auto, skip when text already looks like target.
+  if (original !== undefined && translated === undefined) {
+    const sl = normalizeLang(sourceLang);
+    if ((!sl || sl === "auto") && textLooksLikeLanguage(String(original), targetLang)) {
+      return true;
+    }
   }
   return false;
 }
