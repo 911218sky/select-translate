@@ -17,9 +17,9 @@ import {
   stripTags,
   ttsLang,
   unique
-} from "../src/shared.ts";
-import { resolveLlmConfig } from "../src/llm.ts";
-import { t } from "../src/i18n.ts";
+} from "../src/lib/shared.ts";
+import { resolveLlmConfig } from "../src/lib/llm.ts";
+import { t } from "../src/lib/i18n.ts";
 
 test("language helpers", () => {
   assert.equal(normalizeLang("zh"), "zh-CN");

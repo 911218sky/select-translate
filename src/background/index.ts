@@ -1,10 +1,10 @@
-import type { ExtensionMessage, MessageResponse, Secrets, Settings, TranslateResult } from "./types.ts";
-import { DEFAULTS, GOOGLE_TTS_LIMIT, googleTtsUrl, normalizeLang, parseGoogleResult, toStorage, ttsLang } from "./shared.ts";
-import { llmOrigin, resolveLlmConfig, translateWithLlm } from "./llm.ts";
-import { t } from "./i18n.ts";
+import type { ExtensionMessage, MessageResponse, Secrets, Settings, TranslateResult } from "../lib/types.ts";
+import { DEFAULTS, GOOGLE_TTS_LIMIT, googleTtsUrl, normalizeLang, parseGoogleResult, toStorage, ttsLang } from "../lib/shared.ts";
+import { llmOrigin, resolveLlmConfig, translateWithLlm } from "../lib/llm.ts";
+import { t } from "../lib/i18n.ts";
 
 const MENU_ID = "select-translate-selection";
-const OFFSCREEN_PATH = "src/offscreen.html";
+const OFFSCREEN_PATH = "src/offscreen/index.html";
 let creatingOffscreen: Promise<void> | null = null;
 let menuQueue: Promise<void> = Promise.resolve();
 
@@ -136,7 +136,7 @@ async function sendToTab(tabId: number, payload: ExtensionMessage): Promise<void
   } catch {
     await chrome.scripting.executeScript({
       target: { tabId },
-      files: ["src/content.js"]
+      files: ["src/content/index.js"]
     });
     await chrome.tabs.sendMessage(tabId, payload);
   }
