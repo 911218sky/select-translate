@@ -79,10 +79,18 @@ function boot(): void {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "sync") return;
     for (const [key, value] of Object.entries(changes)) {
-      (state.settings as unknown as Record<string, unknown>)[key] = value.newValue;
+      const next = value.newValue;
+      if (next === undefined) {
+        if (key in DEFAULTS) {
+          (state.settings as unknown as Record<string, unknown>)[key] =
+            (DEFAULTS as unknown as Record<string, unknown>)[key];
+        }
+        continue;
+      }
+      (state.settings as unknown as Record<string, unknown>)[key] = next;
     }
-    if (changes.sourceLang) sourceSelect.value = String(changes.sourceLang.newValue || "auto");
-    if (changes.targetLang) targetSelect.value = String(changes.targetLang.newValue || "zh-TW");
+    if (changes.sourceLang) sourceSelect.value = String(state.settings.sourceLang || "auto");
+    if (changes.targetLang) targetSelect.value = String(state.settings.targetLang || "zh-TW");
     if (changes.uiLocale) paintChrome();
   });
 
@@ -484,7 +492,7 @@ function bubbleStyles(): string {
         margin-bottom: 6px;
       }
       .source, .target { font-size: 16px; line-height: 1.4; word-break: break-word; }
-      .target { color: var(--st-success); font-weight: 500; }
+      .target { color: var(--st-accent); font-weight: 500; }
       .banner {
         color: var(--st-muted);
         font-size: 11px;

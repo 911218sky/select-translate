@@ -121,6 +121,14 @@ export interface SaveSecretsMessage {
   llmApiKey?: string;
 }
 
+export interface ListLlmModelsMessage {
+  type: "LIST_LLM_MODELS";
+}
+
+export interface TestLlmMessage {
+  type: "TEST_LLM";
+}
+
 export interface Secrets {
   llmApiKey: string;
 }
@@ -132,6 +140,8 @@ export type ExtensionMessage =
   | TranslateSelectionMessage
   | GetSecretsMessage
   | SaveSecretsMessage
+  | ListLlmModelsMessage
+  | TestLlmMessage
   | { type: "GET_SETTINGS" }
   | { type: "OPEN_OPTIONS" }
   | { type: "PING" }
@@ -144,6 +154,7 @@ export interface OkResponse<T = unknown> {
   secrets?: Secrets;
   theme?: ChromeThemeLike | null;
   tabId?: number | null;
+  models?: string[];
 }
 
 export interface ErrorResponse {
