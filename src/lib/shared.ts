@@ -182,10 +182,10 @@ export function languageName(code: string, locale?: string): string {
   return resolved.startsWith("zh") ? item.native : item.name;
 }
 
-export function languageBanner(code: string): string {
+export function languageBanner(code: string, locale?: string): string {
   const item = LANGUAGES.find((entry) => entry.code === code);
   if (!item || item.code === "auto") return "";
-  return item.name.toUpperCase();
+  return languageName(item.code, locale).toUpperCase();
 }
 
 export function normalizeLang(code?: string | null): string {
@@ -248,9 +248,8 @@ function countMatches(text: string, pattern: RegExp): number {
 }
 
 /**
- * Cheap script heuristic so we can skip the bubble before calling translate
- * when source is "auto" and the selection already looks like the target language
- * (e.g. target zh-TW + selected Chinese text).
+ * Cheap script heuristic for “selection already looks like this language”.
+ * Only reliable for script-distinct targets (see canPreHideByScript).
  */
 export function textLooksLikeLanguage(text: string, lang: string | undefined): boolean {
   const tl = normalizeLang(lang);
@@ -266,7 +265,8 @@ export function textLooksLikeLanguage(text: string, lang: string | undefined): b
   const cyrillic = countMatches(sample, /\p{Script=Cyrillic}/gu);
   const arabic = countMatches(sample, /\p{Script=Arabic}/gu);
   const thai = countMatches(sample, /\p{Script=Thai}/gu);
-  const total = han + hiragana + katakana + hangul + latin + cyrillic + arabic + thai;
+  const hebrew = countMatches(sample, /\p{Script=Hebrew}/gu);
+  const total = han + hiragana + katakana + hangul + latin + cyrillic + arabic + thai + hebrew;
   if (total === 0) return false;
   const share = (n: number) => n / total;
   const cjkOther = hiragana + katakana + hangul;
@@ -281,9 +281,18 @@ export function textLooksLikeLanguage(text: string, lang: string | undefined): b
   if (tl === "ru" || tl === "uk") return share(cyrillic) >= 0.5;
   if (tl === "ar") return share(arabic) >= 0.5;
   if (tl === "th") return share(thai) >= 0.5;
-  if (tl === "he") return countMatches(sample, /\p{Script=Hebrew}/gu) / Math.max(total, 1) >= 0.5;
-  // Latin-script targets (en, es, fr, …)
+  if (tl === "he") return share(hebrew) >= 0.5;
+  // Latin-script targets (en, es, fr, …) — shared across many languages.
   return share(latin) >= 0.55 && share(han + cjkOther) < 0.2;
+}
+
+/**
+ * Pre-hide before an API call is only safe when the target script is distinctive.
+ * Skip Latin (shared by en/es/fr/…) and Han (zh-CN vs zh-TW need conversion).
+ */
+export function canPreHideByScript(lang: string | undefined): boolean {
+  const tl = normalizeLang(lang);
+  return tl === "ja" || tl === "ko" || tl === "ru" || tl === "uk" || tl === "ar" || tl === "th" || tl === "he";
 }
 
 export function shouldHideTranslation(
@@ -296,10 +305,14 @@ export function shouldHideTranslation(
   if (original !== undefined && translated !== undefined && isNoOpTranslation(original, translated)) {
     return true;
   }
-  // Before translate (no translated yet): if source is auto, skip when text already looks like target.
+  // Before translate: only pre-hide for script-distinct targets when source is auto.
   if (original !== undefined && translated === undefined) {
     const sl = normalizeLang(sourceLang);
-    if ((!sl || sl === "auto") && textLooksLikeLanguage(String(original), targetLang)) {
+    if (
+      (!sl || sl === "auto") &&
+      canPreHideByScript(targetLang) &&
+      textLooksLikeLanguage(String(original), targetLang)
+    ) {
       return true;
     }
   }

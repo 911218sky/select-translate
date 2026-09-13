@@ -10,11 +10,13 @@ const result = must(document.getElementById("result"));
 const errorBox = must(document.getElementById("error"));
 
 let uiLocale = DEFAULTS.uiLocale;
+let enableTts = DEFAULTS.enableTts;
 let translating = false;
 
 void chrome.storage.sync.get(toStorage(DEFAULTS)).then((stored) => {
   const settings = { ...DEFAULTS, ...(stored as unknown as Partial<Settings>) };
   uiLocale = settings.uiLocale === "zh-TW" ? "zh-TW" : "en";
+  enableTts = settings.enableTts !== false;
   applyDomI18n(document, settings);
   document.documentElement.lang = uiLocale === "en" ? "en" : "zh-Hant";
   document.title = t("extName", settings);
@@ -24,6 +26,14 @@ void chrome.storage.sync.get(toStorage(DEFAULTS)).then((stored) => {
   targetLang.value = settings.targetLang || "zh-TW";
 });
 watch();
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "sync") return;
+  if (changes.enableTts) enableTts = changes.enableTts.newValue !== false;
+  if (changes.uiLocale) {
+    uiLocale = changes.uiLocale.newValue === "zh-TW" ? "zh-TW" : "en";
+  }
+});
 
 document.getElementById("translate")?.addEventListener("click", () => {
   void translate();
@@ -60,10 +70,13 @@ async function translate(): Promise<void> {
     if (!response?.ok) throw new Error(response?.error || t("popupFailed", uiLocale));
     const data = response.result as TranslateResult;
     result.hidden = false;
+    const speakButton = enableTts
+      ? `<button class="speak-btn" type="button">${escapeHtml(t("popupSpeak", uiLocale))}</button>`
+      : "";
     result.innerHTML = `
       <div class="translated">${escapeHtml(data.translated)}</div>
       <div class="meta">${escapeHtml(languageName(data.sourceLang, uiLocale))} → ${escapeHtml(languageName(data.targetLang, uiLocale))}</div>
-      <button class="speak-btn" type="button">${escapeHtml(t("popupSpeak", uiLocale))}</button>
+      ${speakButton}
     `;
     result.querySelector(".speak-btn")?.addEventListener("click", () => {
       void (async () => {

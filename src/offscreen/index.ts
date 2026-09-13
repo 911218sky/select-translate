@@ -30,9 +30,10 @@ async function play(message: OffscreenSpeakMessage): Promise<void> {
   let audio = message.audio;
   // Offscreen documents cannot use chrome.storage — pull audio from the service worker instead.
   if (!audio && message.hasAudio) {
-    const response = (await chrome.runtime.sendMessage({ type: "GET_TTS_AUDIO" })) as
-      | { ok?: boolean; audio?: string; error?: string }
-      | undefined;
+    const response = (await chrome.runtime.sendMessage({
+      type: "GET_TTS_AUDIO",
+      audioId: message.audioId
+    })) as { ok?: boolean; audio?: string; error?: string } | undefined;
     if (!response?.ok) {
       throw new Error(response?.error || "No audio available");
     }
@@ -47,9 +48,34 @@ async function play(message: OffscreenSpeakMessage): Promise<void> {
   if (!text || !window.speechSynthesis) {
     throw new Error("No audio available");
   }
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = ttsLang(message.lang);
-  window.speechSynthesis.speak(utterance);
+  await speakWithSynthesis(text, ttsLang(message.lang));
+}
+
+function speakWithSynthesis(text: string, lang: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const start = () => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = lang;
+      utterance.onend = () => resolve();
+      utterance.onerror = () => reject(new Error("Speech failed"));
+      window.speechSynthesis.speak(utterance);
+    };
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      start();
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      window.speechSynthesis.removeEventListener("voiceschanged", onVoices);
+      start();
+    }, 500);
+    const onVoices = () => {
+      window.clearTimeout(timer);
+      window.speechSynthesis.removeEventListener("voiceschanged", onVoices);
+      start();
+    };
+    window.speechSynthesis.addEventListener("voiceschanged", onVoices);
+  });
 }
 
 function stop(): void {

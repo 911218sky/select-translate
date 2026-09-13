@@ -25,9 +25,11 @@ let menuQueue: Promise<void> = Promise.resolve();
 let closeOffscreenTimer = 0;
 let cachedSettings: Settings | null = null;
 let settingsLoad: Promise<Settings> | null = null;
-let activeTranslate: { key: string; controller: AbortController } | null = null;
-/** In-memory TTS payload for offscreen fetch — avoids chrome.storage in offscreen docs. */
-let pendingTtsAudio: string | undefined;
+/** In-flight translates keyed by client (tab:frame or ext). Only same-client requests abort each other. */
+const activeTranslates = new Map<string, { requestKey: string; controller: AbortController }>();
+let ttsAudioSeq = 0;
+/** In-memory TTS payloads for offscreen fetch — keyed by audioId to avoid SPEAK races. */
+const pendingTtsAudio = new Map<string, string>();
 
 async function readSettings(): Promise<Settings> {
   if (cachedSettings) return cachedSettings;
@@ -97,6 +99,16 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
+/** Notify contexts without chrome.theme.onChanged (e.g. content scripts) to re-apply Chrome theme. */
+function stampChromeTheme(): void {
+  void chrome.storage.local.set({ chromeThemeStamp: Date.now() });
+}
+
+if ("theme" in chrome && chrome.theme?.onChanged) {
+  chrome.theme.onChanged.addListener(() => {
+    stampChromeTheme();
+  });
+}
 async function createContextMenu(): Promise<void> {
   const settings = await readSettings();
   await chrome.contextMenus.removeAll();
@@ -173,7 +185,8 @@ async function handleMessage(message: ExtensionMessage, sender: chrome.runtime.M
     if (sender.tab || !isOffscreenSender(sender)) {
       throw new Error("forbidden");
     }
-    return { ok: true, audio: pendingTtsAudio || "" };
+    const id = typeof message.audioId === "string" ? message.audioId : "";
+    return { ok: true, audio: (id && pendingTtsAudio.get(id)) || "" };
   }
 
   const settings = await readSettings();
@@ -225,10 +238,14 @@ async function handleMessage(message: ExtensionMessage, sender: chrome.runtime.M
   throw new Error(t("errorUnknown", settings));
 }
 
-function translateKey(sender: chrome.runtime.MessageSender, requestId?: number): string {
+function translateClientKey(sender: chrome.runtime.MessageSender): string {
   const tab = sender.tab?.id ?? "ext";
   const frame = sender.frameId ?? 0;
-  return `${tab}:${frame}:${requestId ?? Date.now()}`;
+  return `${tab}:${frame}`;
+}
+
+function translateKey(sender: chrome.runtime.MessageSender, requestId?: number): string {
+  return `${translateClientKey(sender)}:${requestId ?? Date.now()}`;
 }
 
 async function sendToTab(tabId: number, payload: ExtensionMessage, frameId?: number): Promise<void> {
@@ -285,12 +302,11 @@ async function translateText(
   const text = String(rawText || "").replace(/\s+/g, " ").trim();
   if (!text) throw new Error(t("errorEmpty", settings));
 
-  if (activeTranslate) {
-    activeTranslate.controller.abort();
-    activeTranslate = null;
-  }
+  const client = key.slice(0, key.lastIndexOf(":"));
+  const previous = activeTranslates.get(client);
+  if (previous) previous.controller.abort();
   const controller = new AbortController();
-  activeTranslate = { key, controller };
+  activeTranslates.set(client, { requestKey: key, controller });
   const signal = controller.signal;
 
   try {
@@ -315,7 +331,8 @@ async function translateText(
       return fallback;
     }
   } finally {
-    if (activeTranslate?.key === key) activeTranslate = null;
+    const current = activeTranslates.get(client);
+    if (current?.requestKey === key) activeTranslates.delete(client);
   }
 }
 
@@ -412,18 +429,20 @@ async function translateWithBackup(
 }
 
 async function speakText(text: string, lang: string | undefined, settings: Settings): Promise<void> {
-  if (!settings.enableTts) return;
+  if (!settings.enableTts) throw new Error(t("errorSpeak", settings));
   const utterance = String(text || "").trim();
   if (!utterance) return;
   const audio = await fetchGoogleTts(utterance, lang);
   await ensureOffscreenReady(settings);
+  const audioId = String(++ttsAudioSeq);
   // Keep large audio out of the broadcast envelope; offscreen pulls it via GET_TTS_AUDIO.
-  pendingTtsAudio = audio || "";
+  pendingTtsAudio.set(audioId, audio || "");
   try {
     const response = await sendOffscreenSpeak(
       {
         type: "OFFSCREEN_SPEAK",
         hasAudio: Boolean(audio),
+        audioId,
         text: audio ? undefined : truncateCodePoints(utterance, GOOGLE_TTS_LIMIT),
         lang: ttsLang(lang)
       },
@@ -434,7 +453,7 @@ async function speakText(text: string, lang: string | undefined, settings: Setti
       throw new Error(response?.error || t("errorSpeak", settings));
     }
   } finally {
-    pendingTtsAudio = undefined;
+    pendingTtsAudio.delete(audioId);
   }
 }
 

@@ -277,6 +277,22 @@ async function listGeminiModels(url: string, apiKey: string, settings: Settings)
   );
 }
 
+function fetchSignal(signal?: AbortSignal, timeoutMs = 25_000): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  if (!signal) return timeout;
+  if (typeof AbortSignal.any === "function") return AbortSignal.any([signal, timeout]);
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  for (const entry of [signal, timeout]) {
+    if (entry.aborted) {
+      controller.abort();
+      break;
+    }
+    entry.addEventListener("abort", onAbort, { once: true });
+  }
+  return controller.signal;
+}
+
 async function postJson(
   url: string,
   body: unknown,
@@ -290,7 +306,7 @@ async function postJson(
       method: "POST",
       headers,
       body: JSON.stringify(body),
-      signal: signal ?? AbortSignal.timeout(25_000)
+      signal: fetchSignal(signal)
     });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") throw error;

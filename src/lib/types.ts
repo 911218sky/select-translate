@@ -108,6 +108,8 @@ export interface OffscreenSpeakMessage {
   audio?: string;
   /** When true, offscreen should request audio from the service worker. */
   hasAudio?: boolean;
+  /** Correlates GET_TTS_AUDIO with the in-flight SPEAK that registered the payload. */
+  audioId?: string;
   text?: string;
   lang?: string;
 }
@@ -118,6 +120,7 @@ export interface OffscreenPingMessage {
 
 export interface GetTtsAudioMessage {
   type: "GET_TTS_AUDIO";
+  audioId?: string;
 }
 
 export interface TranslateSelectionMessage {

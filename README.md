@@ -36,6 +36,8 @@ Pushing a `v*` tag runs GitHub Actions, packs the extension, and attaches the zi
 
 ## Load from source
 
+Requires **Node.js 22+** (see `.nvmrc`).
+
 ```bash
 git clone https://github.com/911218sky/select-translate.git
 cd select-translate

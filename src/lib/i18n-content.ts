@@ -11,6 +11,7 @@ export type ContentMessageKey =
   | "bubbleSpeakTarget"
   | "bubbleOptions"
   | "bubbleMore"
+  | "bubbleTruncated"
   | "popupFailed"
   | "errorMissing"
   | "errorTimeout"
@@ -28,6 +29,7 @@ const ZH: ContentCatalog = {
   bubbleSpeakTarget: "朗讀譯文",
   bubbleOptions: "擴充功能選項",
   bubbleMore: "更多 »",
+  bubbleTruncated: "已截斷至 MAX 字元",
   popupFailed: "翻譯失敗",
   errorMissing: "找不到譯文",
   errorTimeout: "翻譯逾時，請再試一次",
@@ -44,6 +46,7 @@ const EN: ContentCatalog = {
   bubbleSpeakTarget: "Speak translation",
   bubbleOptions: "EXTENSION OPTIONS",
   bubbleMore: "MORE »",
+  bubbleTruncated: "Truncated to MAX characters",
   popupFailed: "Translation failed",
   errorMissing: "No translation found",
   errorTimeout: "Translation timed out. Please try again.",
@@ -62,8 +65,15 @@ function resolveLocale(settings?: Pick<Settings, "uiLocale"> | UiLocale | string
 
 export function t(
   key: ContentMessageKey,
-  settings?: Pick<Settings, "uiLocale"> | UiLocale | string
+  settings?: Pick<Settings, "uiLocale"> | UiLocale | string,
+  vars?: Record<string, string>
 ): string {
   const locale = resolveLocale(settings);
-  return CATALOGS[locale][key] || CATALOGS.en[key] || key;
+  let message = CATALOGS[locale][key] || CATALOGS.en[key] || key;
+  if (vars) {
+    for (const [name, value] of Object.entries(vars)) {
+      message = message.replaceAll(name, value);
+    }
+  }
+  return message;
 }
