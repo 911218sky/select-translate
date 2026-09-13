@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  canPreHideByScript,
   contrastText,
   DEFAULTS,
   googleTtsUrl,
+  languageBanner,
   languageName,
   mixHex,
   normalizeHex,
@@ -31,6 +33,8 @@ test("language helpers", () => {
   assert.equal(ttsLang("zh-TW"), "zh-TW");
   assert.equal(languageName("ja", "zh-TW"), "日本語");
   assert.equal(languageName("ja", "en"), "Japanese");
+  assert.equal(languageBanner("ja", "en"), "JAPANESE");
+  assert.equal(languageBanner("ja", "zh-TW"), "日本語");
   assert.equal(normalizePos("名詞"), "noun");
   assert.equal(normalizePos("形容詞"), "adjective");
   assert.equal(normalizePos("Adjective"), "adjective");
@@ -47,12 +51,30 @@ test("language helpers", () => {
   assert.equal(textLooksLikeLanguage("這是一段中文內容", "en"), false);
   assert.equal(textLooksLikeLanguage("This is English text", "en"), true);
   assert.equal(textLooksLikeLanguage("This is English text", "zh-TW"), false);
-  assert.equal(shouldHideTranslation("auto", "zh-TW", "這是中文"), true);
-  assert.equal(shouldHideTranslation("auto", "zh-TW", "Hello world"), false);
   assert.equal(truncateCodePoints("hello😀world", 6), "hello😀");
   assert.equal(truncateCodePoints("hi", 10), "hi");
   assert.equal(sanitizeHttpUrl("https://api.example.com/v1/chat"), "https://api.example.com/v1/chat");
   assert.equal(sanitizeHttpUrl("javascript:alert(1)"), "");
+});
+
+test("shouldHideTranslation pre-hide only for script-distinct targets", () => {
+  assert.equal(canPreHideByScript("ja"), true);
+  assert.equal(canPreHideByScript("en"), false);
+  assert.equal(canPreHideByScript("zh-TW"), false);
+  assert.equal(canPreHideByScript("zh-CN"), false);
+  // Latin↔Latin must not pre-hide (would block fr→en, en→es, …).
+  assert.equal(shouldHideTranslation("auto", "en", "Bonjour tout le monde"), false);
+  assert.equal(shouldHideTranslation("auto", "es", "This is English text"), false);
+  // Han targets must not pre-hide (zh-CN ↔ zh-TW conversion).
+  assert.equal(shouldHideTranslation("auto", "zh-TW", "这是一段简体中文内容"), false);
+  assert.equal(shouldHideTranslation("auto", "zh-CN", "這是一段繁體中文內容"), false);
+  assert.equal(shouldHideTranslation("auto", "zh-TW", "這是中文"), false);
+  // Script-distinct targets can still pre-hide.
+  assert.equal(shouldHideTranslation("auto", "ja", "これは日本語の文章です"), true);
+  assert.equal(shouldHideTranslation("auto", "ko", "이것은 한국어 문장입니다"), true);
+  assert.equal(shouldHideTranslation("auto", "en", "これは日本語です"), false);
+  // After translate: identical text still hides.
+  assert.equal(shouldHideTranslation("fr", "en", "hello", "hello"), true);
 });
 
 test("google parser", () => {

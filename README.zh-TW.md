@@ -34,6 +34,8 @@
 
 ## 從原始碼載入
 
+需要 **Node.js 22+**（見 `.nvmrc`）。
+
 ```bash
 git clone https://github.com/911218sky/select-translate.git
 cd select-translate

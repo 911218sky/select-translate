@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .jspace/
+.agents-teams/
 *.tsbuildinfo
 src/**/*.js
 src/**/*.js.map

@@ -7,7 +7,8 @@ import {
   languageBanner,
   languageOptionsHtml,
   shouldHideTranslation,
-  toStorage
+  toStorage,
+  truncateCodePoints
 } from "../lib/shared.ts";
 import { t } from "../lib/i18n-content.ts";
 import { unwatch, watch } from "../lib/theme.ts";
@@ -15,6 +16,7 @@ import { unwatch, watch } from "../lib/theme.ts";
 const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 const TRANSLATE_TIMEOUT_MS = 30_000;
 const AUTO_TRANSLATE_DEBOUNCE_MS = 180;
+const LANGUAGE_PICK_MS = 60_000;
 
 if (window.__SELECT_TRANSLATE_LOADED__ !== EXTENSION_VERSION) {
   window.__SELECT_TRANSLATE_CLEANUP__?.();
@@ -139,22 +141,24 @@ function boot(): void {
   targetSelect.addEventListener("mousedown", beginLanguagePick, { capture: true, signal });
   sourceSelect.addEventListener("focus", beginLanguagePick, { signal });
   targetSelect.addEventListener("focus", beginLanguagePick, { signal });
+  sourceSelect.addEventListener("blur", endLanguagePickSoon, { signal });
+  targetSelect.addEventListener("blur", endLanguagePickSoon, { signal });
   sourceSelect.addEventListener("change", async () => {
-    beginLanguagePick();
+    endLanguagePick();
     syncSwapState();
     state.settings.sourceLang = sourceSelect.value;
     await chrome.storage.sync.set({ sourceLang: sourceSelect.value });
     if (state.lastText) await translateNow(state.lastText, { quiet: true, retain: true });
   }, { signal });
   targetSelect.addEventListener("change", async () => {
-    beginLanguagePick();
+    endLanguagePick();
     state.settings.targetLang = targetSelect.value;
     await chrome.storage.sync.set({ targetLang: targetSelect.value });
     if (state.lastText) await translateNow(state.lastText, { quiet: true, retain: true });
   }, { signal });
   swapBtn.addEventListener("click", async () => {
     if (sourceSelect.value === "auto") return;
-    beginLanguagePick();
+    endLanguagePick();
     const nextSource = targetSelect.value;
     const nextTarget = sourceSelect.value;
     sourceSelect.value = nextSource;
@@ -169,9 +173,21 @@ function boot(): void {
   function beginLanguagePick(): void {
     // Native <select> menus render outside the shadow host; keep the bubble
     // alive while the user is choosing a language option.
-    state.pickingLanguageUntil = Date.now() + 2000;
+    state.pickingLanguageUntil = Date.now() + LANGUAGE_PICK_MS;
     window.clearTimeout(state.hideTimer);
     state.hideTimer = 0;
+  }
+
+  function endLanguagePick(): void {
+    state.pickingLanguageUntil = 0;
+  }
+
+  function endLanguagePickSoon(): void {
+    // Delay so a click on an option can still land as `change` while picking.
+    window.setTimeout(() => {
+      if (document.activeElement === sourceSelect || document.activeElement === targetSelect) return;
+      endLanguagePick();
+    }, 300);
   }
 
   function isPickingLanguage(): boolean {
@@ -461,7 +477,7 @@ function boot(): void {
     if (!query) return;
     const sourceLang = sourceSelect.value || state.settings.sourceLang;
     const targetLang = targetSelect.value || state.settings.targetLang;
-    // Already in the target language (e.g. target=zh-TW + Chinese selection) — never flash UI.
+    // Already in the target language (e.g. target=ja + Japanese selection) — never flash UI.
     if (shouldHideTranslation(sourceLang, targetLang, query)) {
       state.pickingLanguageUntil = 0;
       clearAutoTimer();
@@ -474,13 +490,20 @@ function boot(): void {
     ensureLanguagesReady();
     state.lastText = query;
     const requestId = ++state.requestId;
+    const maxChars = Math.min(Math.max(Number(state.settings.maxChars) || 5000, 1), 5000);
+    const displayQuery = truncateCodePoints(query, maxChars);
+    const truncated =
+      displayQuery !== query
+        ? `<div class="warning">${escapeHtml(t("bubbleTruncated", state.settings, { MAX: String(maxChars) }))}</div>`
+        : "";
     card.hidden = false;
-    moreLink.href = googleTranslateUrl(query, sourceLang, targetLang);
+    moreLink.href = googleTranslateUrl(displayQuery, sourceLang, targetLang);
     // Quiet mode (language change): keep current result visible — no "Translating…" flash.
     if (!options.quiet) {
       body.innerHTML = `
+        ${truncated}
         <div class="block" data-no-speak="1">
-          <div class="source">${escapeHtml(query)}</div>
+          <div class="source">${escapeHtml(displayQuery)}</div>
         </div>
         <div class="status" role="status" aria-live="polite">${escapeHtml(t("bubbleTranslating", state.settings))}</div>
       `;
@@ -519,10 +542,13 @@ function boot(): void {
     } catch (error) {
       if (requestId !== state.requestId || card.hidden) return;
       delete card.dataset.busy;
+      if (error instanceof Error && (error.name === "AbortError" || /abort/i.test(error.message))) {
+        return;
+      }
       const message = error instanceof Error ? error.message : t("popupFailed", state.settings);
       body.innerHTML = `
         <div class="block" data-no-speak="1">
-          <div class="source">${escapeHtml(query)}</div>
+          <div class="source">${escapeHtml(displayQuery)}</div>
         </div>
         <div class="status error" role="status" aria-live="polite">${escapeHtml(message)}</div>
       `;
@@ -532,7 +558,7 @@ function boot(): void {
   function renderResult(result: TranslateResult): void {
     // Keep the user's target choice when they just changed the language dropdown.
     const locale = state.settings.uiLocale;
-    const targetLabel = languageBanner(targetSelect.value || result.targetLang);
+    const targetLabel = languageBanner(targetSelect.value || result.targetLang, locale);
     const dictionary = (result.dictionary || [])
       .filter((item) => item.pos && item.terms?.length)
       .slice(0, 4);

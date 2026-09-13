@@ -1,5 +1,15 @@
 import type { Appearance, LlmProvider, Settings, Translator } from "../lib/types.ts";
-import { ACCENT_PRESETS, DEFAULTS, languageOptionsHtml, llmDefaults, normalizeHex, sanitizeHttpUrl, toStorage } from "../lib/shared.ts";
+import {
+  ACCENT_PRESETS,
+  DEFAULTS,
+  escapeAttr,
+  escapeHtml,
+  languageOptionsHtml,
+  llmDefaults,
+  normalizeHex,
+  sanitizeHttpUrl,
+  toStorage
+} from "../lib/shared.ts";
 import { applyDomI18n, t } from "../lib/i18n.ts";
 import { apply as applyTheme, watch } from "../lib/theme.ts";
 
@@ -273,14 +283,6 @@ function syncModelSelect(value: string): void {
   llmModelSelect.value = value && modelChoices.includes(value) ? value : "";
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 function setIfBlurred(el: HTMLInputElement | HTMLSelectElement, value: string): void {
   if (document.activeElement === el) return;
   el.value = value;
@@ -343,14 +345,6 @@ function showToast(): void {
     toast.classList.remove("show");
     toast.hidden = true;
   }, 1400);
-}
-
-function escapeAttr(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }
 
 function must<T>(value: T | null): T {
