@@ -5,6 +5,7 @@ import {
   contrastText,
   DEFAULTS,
   googleTtsUrl,
+  isMixedScript,
   languageBanner,
   languageName,
   mixHex,
@@ -75,6 +76,21 @@ test("shouldHideTranslation pre-hide only for script-distinct targets", () => {
   assert.equal(shouldHideTranslation("auto", "en", "これは日本語です"), false);
   // After translate: identical text still hides.
   assert.equal(shouldHideTranslation("fr", "en", "hello", "hello"), true);
+});
+
+test("shouldHideTranslation keeps mixed Latin+Han glossary selections", () => {
+  const mixed =
+    "phospholipid bilayer（磷脂雙層）＋ proteins（蛋白質）＋ cholesterol（膽固醇）";
+  assert.equal(isMixedScript(mixed), true);
+  assert.equal(isMixedScript("這是一段純繁體中文內容"), false);
+  assert.equal(isMixedScript("This is English text only"), false);
+  assert.equal(isMixedScript("A 級"), false);
+  // Google often detects mixed glossary text as zh when target is zh-TW.
+  assert.equal(shouldHideTranslation("zh-TW", "zh-TW", mixed, mixed), false);
+  assert.equal(shouldHideTranslation("en", "zh-TW", mixed, mixed), false);
+  // Pure target-language / plain no-op still hide.
+  assert.equal(shouldHideTranslation("zh-TW", "zh-TW", "這是一段純繁體中文內容", "這是一段純繁體中文內容"), true);
+  assert.equal(shouldHideTranslation("en", "zh-TW", "hello", "hello"), true);
 });
 
 test("google parser", () => {

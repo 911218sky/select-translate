@@ -295,14 +295,45 @@ export function canPreHideByScript(lang: string | undefined): boolean {
   return tl === "ja" || tl === "ko" || tl === "ru" || tl === "uk" || tl === "ar" || tl === "th" || tl === "he";
 }
 
+/**
+ * True when the text has meaningful amounts of two or more major scripts
+ * (e.g. English terms with Chinese glosses). Used to keep the bubble after
+ * a same-language / no-op result that would otherwise auto-hide.
+ */
+export function isMixedScript(text: string): boolean {
+  const sample = compactText(text);
+  if (!sample) return false;
+  const groups = [
+    countMatches(sample, /\p{Script=Han}/gu),
+    countMatches(sample, /\p{Script=Latin}/gu),
+    countMatches(sample, /\p{Script=Hiragana}/gu) + countMatches(sample, /\p{Script=Katakana}/gu),
+    countMatches(sample, /\p{Script=Hangul}/gu),
+    countMatches(sample, /\p{Script=Cyrillic}/gu),
+    countMatches(sample, /\p{Script=Arabic}/gu),
+    countMatches(sample, /\p{Script=Thai}/gu),
+    countMatches(sample, /\p{Script=Hebrew}/gu)
+  ];
+  // Latin needs a slightly higher bar so a lone brand letter in Chinese
+  // (e.g. "A 級") does not count as mixed glossary text.
+  const present = groups.filter((n, i) => (i === 1 ? n >= 4 : n >= 2)).length;
+  return present >= 2;
+}
+
 export function shouldHideTranslation(
   sourceLang: string | undefined,
   targetLang: string | undefined,
   original?: unknown,
   translated?: unknown
 ): boolean {
-  if (sameLanguage(sourceLang, targetLang)) return true;
-  if (original !== undefined && translated !== undefined && isNoOpTranslation(original, translated)) {
+  const postResult = original !== undefined && translated !== undefined;
+  if (sameLanguage(sourceLang, targetLang)) {
+    // Post-result: keep mixed bilingual selections (Google often detects them as
+    // already being the target, e.g. en+zh glossary → zh-TW).
+    if (postResult && isMixedScript(String(original))) return false;
+    return true;
+  }
+  if (postResult && isNoOpTranslation(original, translated)) {
+    if (isMixedScript(String(original))) return false;
     return true;
   }
   // Before translate: only pre-hide for script-distinct targets when source is auto.
