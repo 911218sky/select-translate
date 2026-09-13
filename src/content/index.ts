@@ -4,6 +4,8 @@ import {
   escapeAttr,
   escapeHtml,
   googleTranslateUrl,
+  isSameLanguageErrorMessage,
+  isSameLanguageTranslationError,
   languageBanner,
   languageOptionsHtml,
   shouldHideTranslation,
@@ -528,10 +530,11 @@ function boot(): void {
       if (!response?.ok) throw new Error(response?.error || t("popupFailed", state.settings));
       const result = response.result as TranslateResult;
       if (!result?.translated?.trim()) throw new Error(t("errorMissing", state.settings));
-      if (
-        !options.retain &&
-        shouldHideTranslation(result.sourceLang, result.targetLang, result.original, result.translated)
-      ) {
+      if (shouldHideTranslation(result.sourceLang, result.targetLang, result.original, result.translated)) {
+        hideUi();
+        return;
+      }
+      if (isSameLanguageTranslationError(result.translated)) {
         hideUi();
         return;
       }
@@ -543,6 +546,10 @@ function boot(): void {
       if (requestId !== state.requestId || card.hidden) return;
       delete card.dataset.busy;
       if (error instanceof Error && (error.name === "AbortError" || /abort/i.test(error.message))) {
+        return;
+      }
+      if (isSameLanguageErrorMessage(error instanceof Error ? error.message : error)) {
+        hideUi();
         return;
       }
       const message = error instanceof Error ? error.message : t("popupFailed", state.settings);

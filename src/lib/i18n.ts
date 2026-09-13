@@ -93,6 +93,7 @@ export type MessageKey =
   | "errorEmpty"
   | "errorGoogle"
   | "errorBackup"
+  | "errorSameLanguage"
   | "errorMissing"
   | "errorUnknown"
   | "errorTimeout"
@@ -194,6 +195,7 @@ const ZH: Catalog = {
   errorEmpty: "沒有可翻譯的文字",
   errorGoogle: "Google 翻譯暫時無法使用（$STATUS$）",
   errorBackup: "備用翻譯來源也失敗了",
+  errorSameLanguage: "來源與目標語言相同",
   errorMissing: "找不到譯文",
   errorUnknown: "未知的訊息類型",
   errorTimeout: "翻譯逾時，請再試一次",
@@ -294,6 +296,7 @@ const EN: Catalog = {
   errorEmpty: "Nothing to translate",
   errorGoogle: "Google Translate is unavailable ($STATUS$)",
   errorBackup: "The fallback translator also failed",
+  errorSameLanguage: "Source and target language are the same",
   errorMissing: "No translation found",
   errorUnknown: "Unknown message type",
   errorTimeout: "Translation timed out. Please try again.",

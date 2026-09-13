@@ -243,6 +243,23 @@ export function isNoOpTranslation(original: unknown, translated: unknown): boole
   return Boolean(source) && source === target;
 }
 
+/** MyMemory returns these as translatedText when source and target match. */
+export function isSameLanguageTranslationError(text: unknown): boolean {
+  const sample = compactText(text);
+  if (!sample) return false;
+  return /PLEASE SELECT TWO DISTINCT LANGUAGES/i.test(sample);
+}
+
+export function isSameLanguageErrorMessage(message: unknown): boolean {
+  const sample = compactText(message);
+  if (!sample) return false;
+  if (isSameLanguageTranslationError(sample)) return true;
+  return (
+    /source and target language are the same/i.test(sample) ||
+    /來源與目標語言相同/.test(sample)
+  );
+}
+
 function countMatches(text: string, pattern: RegExp): number {
   return (text.match(pattern) || []).length;
 }
@@ -303,20 +320,26 @@ export function canPreHideByScript(lang: string | undefined): boolean {
 export function isMixedScript(text: string): boolean {
   const sample = compactText(text);
   if (!sample) return false;
-  const groups = [
-    countMatches(sample, /\p{Script=Han}/gu),
-    countMatches(sample, /\p{Script=Latin}/gu),
-    countMatches(sample, /\p{Script=Hiragana}/gu) + countMatches(sample, /\p{Script=Katakana}/gu),
-    countMatches(sample, /\p{Script=Hangul}/gu),
-    countMatches(sample, /\p{Script=Cyrillic}/gu),
-    countMatches(sample, /\p{Script=Arabic}/gu),
-    countMatches(sample, /\p{Script=Thai}/gu),
-    countMatches(sample, /\p{Script=Hebrew}/gu)
-  ];
-  // Latin needs a slightly higher bar so a lone brand letter in Chinese
-  // (e.g. "A 級") does not count as mixed glossary text.
-  const present = groups.filter((n, i) => (i === 1 ? n >= 4 : n >= 2)).length;
-  return present >= 2;
+  const latin = countMatches(sample, /\p{Script=Latin}/gu);
+  // Require enough Latin letters so a lone brand glyph in Chinese (e.g. "A 級")
+  // does not count as a bilingual glossary selection.
+  if (latin < 4) return false;
+  const han = countMatches(sample, /\p{Script=Han}/gu);
+  const kana = countMatches(sample, /\p{Script=Hiragana}/gu) + countMatches(sample, /\p{Script=Katakana}/gu);
+  const hangul = countMatches(sample, /\p{Script=Hangul}/gu);
+  const cyrillic = countMatches(sample, /\p{Script=Cyrillic}/gu);
+  const arabic = countMatches(sample, /\p{Script=Arabic}/gu);
+  const thai = countMatches(sample, /\p{Script=Thai}/gu);
+  const hebrew = countMatches(sample, /\p{Script=Hebrew}/gu);
+  return (
+    han >= 2 ||
+    kana >= 2 ||
+    hangul >= 2 ||
+    cyrillic >= 2 ||
+    arabic >= 2 ||
+    thai >= 2 ||
+    hebrew >= 2
+  );
 }
 
 export function shouldHideTranslation(
@@ -336,15 +359,19 @@ export function shouldHideTranslation(
     if (isMixedScript(String(original))) return false;
     return true;
   }
-  // Before translate: only pre-hide for script-distinct targets when source is auto.
+  // Before translate: hide when auto-detect would likely match the target.
   if (original !== undefined && translated === undefined) {
     const sl = normalizeLang(sourceLang);
-    if (
-      (!sl || sl === "auto") &&
-      canPreHideByScript(targetLang) &&
-      textLooksLikeLanguage(String(original), targetLang)
-    ) {
-      return true;
+    const tl = normalizeLang(targetLang);
+    if ((!sl || sl === "auto") && tl && tl !== "auto" && !isMixedScript(String(original))) {
+      if (canPreHideByScript(tl) && textLooksLikeLanguage(String(original), tl)) {
+        return true;
+      }
+      // Han targets are excluded from canPreHideByScript (zh-CN ↔ zh-TW), but pure
+      // Han selections that already match the target should not open the bubble.
+      if ((tl === "zh-TW" || tl === "zh-CN") && textLooksLikeLanguage(String(original), tl)) {
+        return true;
+      }
     }
   }
   return false;
