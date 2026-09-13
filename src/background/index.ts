@@ -3,6 +3,7 @@ import {
   DEFAULTS,
   GOOGLE_TTS_LIMIT,
   googleTtsUrl,
+  isSameLanguageTranslationError,
   normalizeLang,
   parseGoogleResult,
   toStorage,
@@ -410,9 +411,21 @@ async function translateWithBackup(
     signal: mergeAbortSignals([signal, AbortSignal.timeout(BACKUP_TIMEOUT_MS)])
   });
   if (!response.ok) throw new Error(t("errorBackup", settings));
-  const data = (await response.json()) as { responseData?: { translatedText?: string } };
+  const data = (await response.json()) as {
+    responseData?: { translatedText?: string };
+    responseStatus?: string | number;
+  };
   const translated = data?.responseData?.translatedText;
-  if (!translated) throw new Error(t("errorMissing", settings));
+  if (
+    !translated ||
+    isSameLanguageTranslationError(translated) ||
+    String(data?.responseStatus || "") === "403"
+  ) {
+    if (translated && isSameLanguageTranslationError(translated)) {
+      throw new Error(t("errorSameLanguage", settings));
+    }
+    throw new Error(t("errorMissing", settings));
+  }
 
   return {
     original: backupText,

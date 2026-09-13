@@ -17,6 +17,8 @@ import {
   resolveTheme,
   sameLanguage,
   sanitizeHttpUrl,
+  isSameLanguageErrorMessage,
+  isSameLanguageTranslationError,
   shouldHideTranslation,
   stripTags,
   textLooksLikeLanguage,
@@ -66,10 +68,12 @@ test("shouldHideTranslation pre-hide only for script-distinct targets", () => {
   // Latin↔Latin must not pre-hide (would block fr→en, en→es, …).
   assert.equal(shouldHideTranslation("auto", "en", "Bonjour tout le monde"), false);
   assert.equal(shouldHideTranslation("auto", "es", "This is English text"), false);
-  // Han targets must not pre-hide (zh-CN ↔ zh-TW conversion).
-  assert.equal(shouldHideTranslation("auto", "zh-TW", "这是一段简体中文内容"), false);
-  assert.equal(shouldHideTranslation("auto", "zh-CN", "這是一段繁體中文內容"), false);
-  assert.equal(shouldHideTranslation("auto", "zh-TW", "這是中文"), false);
+  // Pure Han selections that already match the target should pre-hide.
+  assert.equal(shouldHideTranslation("auto", "zh-TW", "这是一段简体中文内容"), true);
+  assert.equal(shouldHideTranslation("auto", "zh-CN", "這是一段繁體中文內容"), true);
+  assert.equal(shouldHideTranslation("auto", "zh-TW", "這是中文"), true);
+  assert.equal(isSameLanguageTranslationError("PLEASE SELECT TWO DISTINCT LANGUAGES"), true);
+  assert.equal(isSameLanguageErrorMessage("Source and target language are the same"), true);
   // Script-distinct targets can still pre-hide.
   assert.equal(shouldHideTranslation("auto", "ja", "これは日本語の文章です"), true);
   assert.equal(shouldHideTranslation("auto", "ko", "이것은 한국어 문장입니다"), true);
