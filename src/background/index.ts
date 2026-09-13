@@ -326,9 +326,8 @@ async function translateText(
       return await translateWithGoogle(limited, sl, tl, settings, signal);
     } catch (googleError) {
       if (signal.aborted) throw googleError;
-      const fallback = await translateWithBackup(limited, sl, tl, settings, signal);
-      fallback.warning = googleError instanceof Error ? googleError.message : t("warningFallback", settings);
-      return fallback;
+      // Fallback succeeded — return result without surfacing the Google error (e.g. 429).
+      return await translateWithBackup(limited, sl, tl, settings, signal);
     }
   } finally {
     const current = activeTranslates.get(client);
